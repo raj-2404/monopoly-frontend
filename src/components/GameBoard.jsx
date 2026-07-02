@@ -152,6 +152,21 @@ export default function GameBoard() {
     const [offeredProperties, setOfferedProperties] = useState([]);
     const [requestedProperties, setRequestedProperties] = useState([]);
     const [selectedPlayerForMenu, setSelectedPlayerForMenu] = useState(null);
+    const [actionPending, setActionPending] = useState(false);
+
+    useEffect(() => {
+        setActionPending(false);
+    }, [game]);
+
+    // Safety timeout to clear pending actions in case of network issues
+    useEffect(() => {
+        if (actionPending) {
+            const timer = setTimeout(() => {
+                setActionPending(false);
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [actionPending]);
 
     // Fetch pending trades when game changes
     useEffect(() => {
@@ -468,25 +483,67 @@ export default function GameBoard() {
     };
 
     // Handler helpers for actions
-    const handleRoll = () => sendGameAction('ROLL_DICE');
+    const handleRoll = () => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('ROLL_DICE');
+    };
     const handleBuy = (propId) => {
+        if (actionPending) return;
         if (!propId) {
             toast.error('No estate found on your current tile');
             return;
         }
+        setActionPending(true);
         sendGameAction('BUY_PROPERTY', propId);
     };
-    const handleSkip = () => sendGameAction('SKIP_PROPERTY', currentProperty?.propertyId ?? null, { endTurnAfter: true });
-    const handlePayBail = () => sendGameAction('PAY_BAIL');
-    const handleEndTurn = () => sendGameAction('END_TURN');
+    const handleSkip = () => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('SKIP_PROPERTY', currentProperty?.propertyId ?? null, { endTurnAfter: true });
+    };
+    const handlePayBail = () => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('PAY_BAIL');
+    };
+    const handleEndTurn = () => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('END_TURN');
+    };
 
     // Build/upgrade/mortgage
-    const handleBuildHouse = (propId) => sendGameAction('BUILD_HOUSE', propId);
-    const handleBuildHotel = (propId) => sendGameAction('BUILD_HOTEL', propId);
-    const handleSellHouse = (propId) => sendGameAction('SELL_HOUSE', propId);
-    const handleSellHotel = (propId) => sendGameAction('SELL_HOTEL', propId);
-    const handleMortgage = (propId) => sendGameAction('MORTGAGE', propId);
-    const handleUnmortgage = (propId) => sendGameAction('UNMORTGAGE', propId);
+    const handleBuildHouse = (propId) => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('BUILD_HOUSE', propId);
+    };
+    const handleBuildHotel = (propId) => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('BUILD_HOTEL', propId);
+    };
+    const handleSellHouse = (propId) => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('SELL_HOUSE', propId);
+    };
+    const handleSellHotel = (propId) => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('SELL_HOTEL', propId);
+    };
+    const handleMortgage = (propId) => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('MORTGAGE', propId);
+    };
+    const handleUnmortgage = (propId) => {
+        if (actionPending) return;
+        setActionPending(true);
+        sendGameAction('UNMORTGAGE', propId);
+    };
 
     // Get current tile client-side description
     const getTileDesc = (tile) => {
@@ -619,8 +676,11 @@ export default function GameBoard() {
                                             </div>
                                             <div className="text-left">
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className="text-sm font-semibold text-white">{p.username}</span>
-                                                    {isCurrentTurn && <span className="flex h-1.5 w-1.5 rounded-full bg-purple-500 animate-ping"></span>}
+                                                    <span className={`text-sm font-semibold ${p.connected === false ? 'text-slate-500' : 'text-white'}`}>{p.username}</span>
+                                                    {p.connected === false && (
+                                                        <span className="rounded bg-red-500/10 border border-red-500/30 px-1.5 py-0.5 text-[8px] font-medium text-red-400 uppercase">Offline</span>
+                                                    )}
+                                                    {isCurrentTurn && p.connected !== false && <span className="flex h-1.5 w-1.5 rounded-full bg-purple-500 animate-ping"></span>}
                                                 </div>
                                                 <p className="text-xs text-slate-400">Pos: Tile #{p.position}</p>
                                             </div>
@@ -1232,10 +1292,11 @@ export default function GameBoard() {
                                                     {!hasRolled && !isJailed && (
                                                         <button 
                                                             onClick={handleRoll}
-                                                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500 glow-primary cursor-pointer transition-transform duration-200 active:scale-95 shadow-md"
+                                                            disabled={actionPending}
+                                                            className={`w-full flex items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500 glow-primary cursor-pointer transition-transform duration-200 active:scale-95 shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                         >
                                                             <Dice5 className="h-5 w-5" />
-                                                            Roll Dice
+                                                            {actionPending ? 'Rolling...' : 'Roll Dice'}
                                                         </button>
                                                     )}
 
@@ -1244,14 +1305,16 @@ export default function GameBoard() {
                                                         <div className="flex gap-2">
                                                             <button 
                                                                 onClick={handlePayBail}
-                                                                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 py-2.5 text-xs font-bold text-white hover:bg-amber-500 transition-all cursor-pointer shadow-sm"
+                                                                disabled={actionPending}
+                                                                className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 py-2.5 text-xs font-bold text-white hover:bg-amber-500 transition-all cursor-pointer shadow-sm ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                             >
                                                                 <DollarSign className="h-4 w-4" />
                                                                 Pay ₹500 Bail
                                                             </button>
                                                             <button 
                                                                 onClick={handleEndTurn}
-                                                                className="flex-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-all cursor-pointer shadow-xs"
+                                                                disabled={actionPending}
+                                                                className={`flex-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-all cursor-pointer shadow-xs ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                             >
                                                                 Skip & Stay Jailed
                                                             </button>
@@ -1267,13 +1330,15 @@ export default function GameBoard() {
                                                             <div className="flex gap-2 mt-1">
                                                                 <button 
                                                                     onClick={() => handleBuy(currentProperty?.propertyId)}
-                                                                    className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 glow-success cursor-pointer shadow-sm"
+                                                                    disabled={actionPending}
+                                                                    className={`flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 glow-success cursor-pointer shadow-sm ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                                 >
                                                                     Buy Estate
                                                                 </button>
                                                                 <button 
                                                                     onClick={handleSkip}
-                                                                    className="flex-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-700 cursor-pointer shadow-xs"
+                                                                    disabled={actionPending}
+                                                                    className={`flex-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-700 cursor-pointer shadow-xs ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                                 >
                                                                     Skip & End Turn
                                                                 </button>
@@ -1285,10 +1350,11 @@ export default function GameBoard() {
                                                     {hasRolled && pendingAction === 'NONE' && (
                                                         <button 
                                                             onClick={handleEndTurn}
-                                                            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-500 transition-colors cursor-pointer shadow-md"
+                                                            disabled={actionPending}
+                                                            className={`w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-500 transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                         >
                                                             <UserCheck className="h-5 w-5" />
-                                                            End Turn
+                                                            {actionPending ? 'Ending Turn...' : 'End Turn'}
                                                         </button>
                                                     )}
                                                 </div>
@@ -1586,7 +1652,8 @@ export default function GameBoard() {
 
                             <button 
                                 onClick={handleEndTurn}
-                                className="w-full rounded-lg border border-red-500/30 bg-red-950/15 py-3 text-xs font-bold text-red-400 hover:bg-red-500 hover:text-white transition-all cursor-pointer"
+                                disabled={actionPending}
+                                className={`w-full rounded-lg border border-red-500/30 bg-red-950/15 py-3 text-xs font-bold text-red-400 hover:bg-red-500 hover:text-white transition-all cursor-pointer ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                                 Declare Bankruptcy
                             </button>

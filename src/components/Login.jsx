@@ -6,11 +6,17 @@ export default function Login() {
     const { login } = useContext(GameContext);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!username.trim() || !password.trim()) return;
-        login(username, password);
+        if (!username.trim() || !password.trim() || loading) return;
+        setLoading(true);
+        try {
+            await login(username, password);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -58,10 +64,11 @@ export default function Login() {
 
                         <button
                             type="submit"
-                            className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3.5 text-sm font-semibold text-white hover:bg-purple-500 transition-colors focus:outline-none glow-primary cursor-pointer"
+                            disabled={loading}
+                            className={`flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3.5 text-sm font-semibold text-white hover:bg-purple-500 transition-colors focus:outline-none glow-primary cursor-pointer ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             <LogIn className="h-4 w-4" />
-                            Sign In / Register
+                            {loading ? 'Signing In...' : 'Sign In / Register'}
                         </button>
                     </form>
                 </div>

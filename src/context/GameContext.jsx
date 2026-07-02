@@ -49,6 +49,28 @@ export const GameProvider = ({ children }) => {
         gameRef.current = game;
     }, [game]);
 
+    useEffect(() => {
+        const checkActiveRoom = async () => {
+            if (!user) return;
+            try {
+                const res = await getAxios().get('/rooms/active');
+                const activeRoom = res.data.data;
+                if (activeRoom) {
+                    setRoom(activeRoom);
+                    connectWebSocket(activeRoom.roomId);
+                    if (activeRoom.status === 'PLAYING') {
+                        await fetchGameState(activeRoom.roomId);
+                    } else if (activeRoom.status === 'WAITING') {
+                        setCurrentScreen('lobby');
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to check active room:', e);
+            }
+        };
+        checkActiveRoom();
+    }, [user]);
+
     // Get Auth Axios Instance
     const getAxios = () => {
         return axios.create({
@@ -66,6 +88,9 @@ export const GameProvider = ({ children }) => {
         const socket = new SockJS(WS_BASE);
         const client = new Client({
             webSocketFactory: () => socket,
+            connectHeaders: {
+                userId: user?.id
+            },
             debug: (str) => console.log('[STOMP]', str),
             reconnectDelay: 5000,
             heartbeatIncoming: 4000,
@@ -154,6 +179,20 @@ export const GameProvider = ({ children }) => {
             case 'GAME_STARTED':
                 toast.success('The match has started!');
                 fetchGameState(payload.gameId || room.roomId);
+                break;
+            case 'PLAYER_JOINED':
+                if (payload.connected !== undefined) {
+                    updatePlayerState(payload.playerId, { connected: true });
+                    toast.success(`${payload.username} has reconnected!`);
+                    addLog(`⚡ ${payload.username} reconnected.`);
+                }
+                break;
+            case 'PLAYER_LEFT':
+                if (payload.connected !== undefined) {
+                    updatePlayerState(payload.playerId, { connected: false });
+                    toast.error(`${payload.username} disconnected! 5 minutes to reconnect.`);
+                    addLog(`⚡ ${payload.username} disconnected.`);
+                }
                 break;
             case 'DICE_ROLLED':
                 playSound('roll_dice.mp3');
