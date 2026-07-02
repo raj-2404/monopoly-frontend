@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -56,15 +57,21 @@ body {
 }
 
 /* Board Layout Grid Helper */
-/* A 36-space board has 10 spaces per side (including corners twice). Let's represent it cleanly */
+/* 
+  Corner cells (col 1, col 10, row 1, row 10) are 2fr — making them bigger squares.
+  Side cells (cols 2-9, rows 2-9) are 1fr — making them narrow rectangles.
+  This matches the reference board style exactly.
+*/
 .board-grid {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  grid-template-rows: repeat(10, minmax(0, 1fr));
+  grid-template-columns: 2fr repeat(8, 1fr) 2fr;
+  grid-template-rows:    2fr repeat(8, 1fr) 2fr;
   width: 100%;
   aspect-ratio: 1 / 1;
-  background-color: #555555; /* Medium-grey grid divider lines */
-  gap: 1.5px; /* Clean grid separation line */
+  background-color: #10122a;
+  gap: 2px;
+  border-radius: 0.75rem;
+  overflow: hidden;
 }
 
 /* Animations */

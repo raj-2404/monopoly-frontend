@@ -5,6 +5,7 @@ import SockJS from 'sockjs-client';
 import toast from 'react-hot-toast';
 import { boardData, propertyCatalogById } from '../utils/boardData';
 import { API_BASE, WS_BASE } from '../config/runtimeConfig';
+import gameRules from '../config/game-rules.json';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const GameContext = createContext();
@@ -40,7 +41,8 @@ export const GameProvider = ({ children }) => {
     const [wsConnected, setWsConnected] = useState(false);
 
     const stompClientRef = useRef(null);
-    const subscriptionsRef = useRef([]);
+    const roomSubscriptionRef = useRef(null);
+    const gameSubscriptionRef = useRef(null);
     const gameRef = useRef(null);
 
     useEffect(() => {
@@ -75,7 +77,10 @@ export const GameProvider = ({ children }) => {
             setWsConnected(true);
 
             // Subscribe to Room Lobbies
-            const roomSub = client.subscribe(`/topic/room/${roomId}`, (msg) => {
+            if (roomSubscriptionRef.current) {
+                roomSubscriptionRef.current.unsubscribe();
+            }
+            roomSubscriptionRef.current = client.subscribe(`/topic/room/${roomId}`, (msg) => {
                 const updatedRoom = JSON.parse(msg.body);
                 setRoom(updatedRoom);
                 if (updatedRoom.status === 'PLAYING') {
@@ -86,7 +91,6 @@ export const GameProvider = ({ children }) => {
                     fetchGameState(activeGameId);
                 }
             });
-            subscriptionsRef.current.push(roomSub);
 
             // Subscribe to Gameplay events if gameId exists
             const activeGameId = gameId || roomId;
@@ -112,26 +116,26 @@ export const GameProvider = ({ children }) => {
     const subscribeToGame = (client, gameId) => {
         console.log('Subscribing to game events for ID:', gameId);
         
-        // Unsubscribe existing game subscriptions
-        subscriptionsRef.current = subscriptionsRef.current.filter((sub, idx) => {
-            if (idx > 0) { // Keep room subscription if it's the first one
-                sub.unsubscribe();
-                return false;
-            }
-            return true;
-        });
+        if (gameSubscriptionRef.current) {
+            gameSubscriptionRef.current.unsubscribe();
+        }
 
-        const gameSub = client.subscribe(`/topic/game/${gameId}`, (msg) => {
+        gameSubscriptionRef.current = client.subscribe(`/topic/game/${gameId}`, (msg) => {
             const event = JSON.parse(msg.body);
             handleGameEvent(event);
         });
-        subscriptionsRef.current.push(gameSub);
     };
 
     const disconnectWebSocket = () => {
+        if (roomSubscriptionRef.current) {
+            roomSubscriptionRef.current.unsubscribe();
+            roomSubscriptionRef.current = null;
+        }
+        if (gameSubscriptionRef.current) {
+            gameSubscriptionRef.current.unsubscribe();
+            gameSubscriptionRef.current = null;
+        }
         if (stompClientRef.current) {
-            subscriptionsRef.current.forEach(sub => sub.unsubscribe());
-            subscriptionsRef.current = [];
             stompClientRef.current.deactivate();
             stompClientRef.current = null;
         }
@@ -163,7 +167,6 @@ export const GameProvider = ({ children }) => {
                 addLog(`${getPlayerName(payload.playerId)} rolled ${payload.diceOne} & ${payload.diceTwo} (Total: ${payload.total})`);
                 break;
             case 'PLAYER_MOVED': {
-                playSound('move_token.mp3');
                 const oldPosition = gameRef.current?.players.find(pl => String(pl.playerId).toLowerCase() === String(payload.playerId).toLowerCase())?.position;
                 updatePlayerState(payload.playerId, { position: payload.to });
                 
@@ -174,7 +177,7 @@ export const GameProvider = ({ children }) => {
                 // Detect passing START (to position < from position, or exactly 0)
                 if (oldPosition !== undefined && (payload.to < oldPosition || payload.to === 0)) {
                     playSound('pass_start.mp3');
-                    addLog(`🎁 ${getPlayerName(payload.playerId)} passed START and collected ₹2,000!`);
+                    addLog(`🎁 ${getPlayerName(payload.playerId)} passed START and collected ₹${gameRules.passStartReward.toLocaleString()}!`);
                 }
                 break;
             }
@@ -331,6 +334,22 @@ export const GameProvider = ({ children }) => {
                     winnerId: payload.winnerId
                 }));
                 setCurrentScreen('winner');
+                break;
+            case 'TRADE_PROPOSED':
+                toast(`New trade proposal from ${payload.proposerName}!`, { icon: '🤝' });
+                addLog(`🤝 ${payload.proposerName} proposed a trade to ${payload.receiverName}.`);
+                break;
+            case 'TRADE_ACCEPTED':
+                playSound('buy_property.mp3');
+                toast.success('Trade accepted!');
+                addLog(`🤝 Trade between ${getPlayerName(payload.proposerId)} and ${getPlayerName(payload.receiverId)} was ACCEPTED!`);
+                break;
+            case 'TRADE_REJECTED':
+                toast.error('Trade offer was rejected');
+                addLog(`🤝 A trade offer was rejected.`);
+                break;
+            case 'TRADE_CANCELLED':
+                addLog(`🤝 A trade offer was cancelled.`);
                 break;
             default:
                 break;
@@ -571,6 +590,75 @@ export const GameProvider = ({ children }) => {
         return true;
     };
 
+    const proposeTrade = async (receiverId, offeredProperties, requestedProperties, offeredCash, requestedCash) => {
+        if (!game) return null;
+        try {
+            const res = await getAxios().post(`/games/${game.gameId}/trades`, {
+                receiverId,
+                offeredProperties,
+                requestedProperties,
+                offeredCash,
+                requestedCash
+            });
+            toast.success('Trade proposed successfully');
+            return res.data.data;
+        } catch (e) {
+            console.error(e);
+            toast.error(e.response?.data?.message || 'Failed to propose trade');
+            throw e;
+        }
+    };
+
+    const fetchPendingTrades = async () => {
+        if (!game) return [];
+        try {
+            const res = await getAxios().get(`/games/${game.gameId}/trades/pending`);
+            return res.data.data;
+        } catch (e) {
+            console.error(e);
+            return [];
+        }
+    };
+
+    const acceptTrade = async (tradeId) => {
+        if (!game) return;
+        try {
+            await getAxios().post(`/games/${game.gameId}/trades/${tradeId}/accept`);
+            toast.success('Trade accepted successfully');
+            fetchGameState(game.gameId);
+        } catch (e) {
+            console.error(e);
+            toast.error(e.response?.data?.message || 'Failed to accept trade');
+            throw e;
+        }
+    };
+
+    const rejectTrade = async (tradeId) => {
+        if (!game) return;
+        try {
+            await getAxios().post(`/games/${game.gameId}/trades/${tradeId}/reject`);
+            toast.success('Trade rejected');
+            fetchGameState(game.gameId);
+        } catch (e) {
+            console.error(e);
+            toast.error(e.response?.data?.message || 'Failed to reject trade');
+            throw e;
+        }
+    };
+
+    const cancelTrade = async (tradeId) => {
+        if (!game) return;
+        try {
+            await getAxios().post(`/games/${game.gameId}/trades/${tradeId}/cancel`);
+            toast.success('Trade cancelled');
+            fetchGameState(game.gameId);
+        } catch (e) {
+            console.error(e);
+            toast.error(e.response?.data?.message || 'Failed to cancel trade');
+            throw e;
+        }
+    };
+
     return (
         <GameContext.Provider value={{
             user,
@@ -587,7 +675,12 @@ export const GameProvider = ({ children }) => {
             leaveRoom,
             toggleReady,
             startGame,
-            sendGameAction
+            sendGameAction,
+            proposeTrade,
+            fetchPendingTrades,
+            acceptTrade,
+            rejectTrade,
+            cancelTrade
         }}>
             {children}
         </GameContext.Provider>

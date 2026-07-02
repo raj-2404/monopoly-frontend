@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { GameContext } from '../context/GameContext';
 import { boardData, propertyCatalogById } from '../utils/boardData';
 import { 
@@ -14,6 +14,116 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+// ── Board token — the cute circle-with-eyes badge that moves on the board ────
+function BoardToken({ username, size = 22 }) {
+    const tokenHex = localStorage.getItem(`vyapar_token_hex_${username}`) || '#a855f7';
+    const eyeOuter = Math.round(size * 0.32);
+    const eyeInner = Math.round(size * 0.18);
+    return (
+        <div
+            title={username}
+            style={{
+                width: size,
+                height: size,
+                backgroundColor: tokenHex,
+                borderRadius: '50%',
+                boxShadow: `0 0 8px 2px ${tokenHex}99, 0 0 0 1.5px rgba(0,0,0,0.8)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                position: 'relative',
+            }}
+        >
+            {/* Eyes */}
+            <div style={{ display: 'flex', gap: Math.round(size * 0.08), alignItems: 'center', marginTop: Math.round(size * 0.05) }}>
+                {[0, 1].map(i => (
+                    <div key={i} style={{
+                        width: eyeOuter, height: eyeOuter,
+                        backgroundColor: '#fff',
+                        borderRadius: '50%',
+                        position: 'relative',
+                        overflow: 'hidden',
+                    }}>
+                        <div style={{
+                            width: eyeInner, height: eyeInner,
+                            backgroundColor: '#111',
+                            borderRadius: '50%',
+                            position: 'absolute',
+                            bottom: 1,
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                        }} />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ── Dot positions for each dice face ─────────────────────────────────────────
+// Each entry is an array of [cx, cy] percentage positions within the die face
+const DICE_DOTS = {
+    1: [[50, 50]],
+    2: [[28, 28], [72, 72]],
+    3: [[28, 28], [50, 50], [72, 72]],
+    4: [[28, 28], [72, 28], [28, 72], [72, 72]],
+    5: [[28, 28], [72, 28], [50, 50], [28, 72], [72, 72]],
+    6: [[28, 25], [72, 25], [28, 50], [72, 50], [28, 75], [72, 75]],
+};
+
+function DiceFace({ value, isDouble }) {
+    const dots = DICE_DOTS[value] || [];
+    const size = 52;
+    return (
+        <svg
+            width={size}
+            height={size}
+            viewBox="0 0 100 100"
+            xmlns="http://www.w3.org/2000/svg"
+            style={{
+                filter: isDouble
+                    ? 'drop-shadow(0 0 10px rgba(250,204,21,0.8))'
+                    : 'drop-shadow(0 0 8px rgba(168,85,247,0.5))',
+                borderRadius: '18px',
+            }}
+        >
+            {/* Dice body */}
+            <rect
+                x="2" y="2" width="96" height="96" rx="18" ry="18"
+                fill="url(#diceGrad)"
+                stroke={isDouble ? 'rgba(250,204,21,0.7)' : 'rgba(168,85,247,0.5)'}
+                strokeWidth="2.5"
+            />
+            {/* Gradient fill */}
+            <defs>
+                <linearGradient id="diceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#1e1b4b" />
+                    <stop offset="100%" stopColor="#0f0a23" />
+                </linearGradient>
+                {/* Inner gloss */}
+                <radialGradient id="diceGloss" cx="30%" cy="25%" r="50%">
+                    <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
+                    <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+                </radialGradient>
+            </defs>
+            {/* Gloss layer */}
+            <rect x="2" y="2" width="96" height="96" rx="18" ry="18" fill="url(#diceGloss)" />
+            {/* Dots */}
+            {dots.map(([cx, cy], i) => (
+                <circle
+                    key={i}
+                    cx={cx}
+                    cy={cy}
+                    r="9"
+                    fill={isDouble ? '#fde047' : '#a855f7'}
+                    style={{ filter: `drop-shadow(0 0 3px ${isDouble ? '#fde047' : '#a855f7'})` }}
+                />
+            ))}
+        </svg>
+    );
+}
+
 export default function GameBoard() {
     const { 
         user, 
@@ -21,13 +131,44 @@ export default function GameBoard() {
         dice, 
         logs, 
         leaveRoom, 
-        sendGameAction 
+        sendGameAction,
+        proposeTrade,
+        fetchPendingTrades,
+        acceptTrade,
+        rejectTrade,
+        cancelTrade
     } = useContext(GameContext);
 
     const [activeTab, setActiveTab] = useState('actions'); // 'actions' | 'assets' | 'logs'
     const [selectedProperty, setSelectedProperty] = useState(null);
-    const [selectedPropImgError, setSelectedPropImgError] = useState(null);
-    const [unownedPropImgError, setUnownedPropImgError] = useState(null);
+
+    // Trade states
+    const [pendingTrades, setPendingTrades] = useState([]);
+    const [showTradeModal, setShowTradeModal] = useState(false);
+    const [tradePartner, setTradePartner] = useState(null);
+    const [offeredCash, setOfferedCash] = useState(0);
+    const [requestedCash, setRequestedCash] = useState(0);
+    const [offeredProperties, setOfferedProperties] = useState([]);
+    const [requestedProperties, setRequestedProperties] = useState([]);
+    const [selectedPlayerForMenu, setSelectedPlayerForMenu] = useState(null);
+
+    // Fetch pending trades when game changes
+    useEffect(() => {
+        if (game) {
+            fetchPendingTrades().then(trades => {
+                setPendingTrades(trades || []);
+            });
+        }
+    }, [game]);
+
+    const isColorGroupImproved = (group) => {
+        if (!group) return false;
+        const groupProperties = game.properties.filter(p => {
+            const cat = propertyCatalogById[p.propertyId];
+            return cat && cat.group === group;
+        });
+        return groupProperties.some(p => p.developmentLevel > 0);
+    };
 
     const getPropertyImagePath = (name, type) => {
         const value = name || type;
@@ -96,8 +237,6 @@ export default function GameBoard() {
         turnPlayerProperty &&
         !turnPlayerProperty.ownerId
     );
-    const unownedPropImgKey = getPropertyImageKey(turnPlayerProperty);
-    const isUnownedPropImgError = unownedPropImgError === unownedPropImgKey;
     // Color mapper for board properties
     const groupColors = {
         'DARK_BLUE': 'bg-blue-600',
@@ -155,6 +294,19 @@ export default function GameBoard() {
         return idx !== -1 ? playerBgColors[idx % playerBgColors.length] : '';
     };
 
+    // Raw solid hex colors per player — prefer localStorage token choice, fallback to defaults
+    const playerRawColors = ['#b91c1c', '#1d4ed8', '#15803d', '#c2410c', '#6b21a8', '#4e342e'];
+    const getPlayerRawColor = (ownerId) => {
+        if (!ownerId) return null;
+        const ownerPlayer = game.players.find(p => p.playerId === ownerId);
+        if (ownerPlayer?.username) {
+            const saved = localStorage.getItem(`vyapar_token_hex_${ownerPlayer.username}`);
+            if (saved) return saved;
+        }
+        const idx = game.players.findIndex(p => p.playerId === ownerId);
+        return idx !== -1 ? playerRawColors[idx % playerRawColors.length] : null;
+    };
+
     const getPlayerBadgeClass = (playerId) => {
         const idx = game.players.findIndex(p => p.playerId === playerId);
         const badgeColors = [
@@ -180,8 +332,6 @@ export default function GameBoard() {
             ...game.properties.find(p => p.propertyId === selectedProperty.propertyId)
           }
         : null;
-    const selectedPropImgKey = getPropertyImageKey(selectedProperty);
-    const isSelectedPropImgError = selectedPropImgError === selectedPropImgKey;
 
     const ownedInGroup = liveSelectedProperty
         ? game.properties.filter(p => 
@@ -226,16 +376,94 @@ export default function GameBoard() {
         return '';
     };
 
+    // ── Tile position helpers ──────────────────────────────────────────────
+    // bottom row  : pos  0-9   → row 10, col 10-pos
+    // left col    : pos 10-17  → row 9-(pos-9), col 1
+    // top row     : pos 18-27  → row 1, col pos-17
+    // right col   : pos 28-35  → row pos-26, col 10
     const getGridArea = (pos) => {
-        if (pos >= 0 && pos <= 9) {
-            return { gridRow: 10, gridColumn: 10 - pos };
-        } else if (pos > 9 && pos <= 18) {
-            return { gridRow: 19 - pos, gridColumn: 1 };
-        } else if (pos > 18 && pos <= 27) {
-            return { gridRow: 1, gridColumn: pos - 17 };
-        } else {
-            return { gridRow: pos - 26, gridColumn: 10 };
-        }
+        if (pos >= 0 && pos <= 9)   return { gridRow: 10, gridColumn: 10 - pos };
+        if (pos > 9  && pos <= 17)  return { gridRow: 19 - pos, gridColumn: 1 };
+        if (pos > 17 && pos <= 27)  return { gridRow: 1, gridColumn: pos - 17 };
+        return { gridRow: pos - 26, gridColumn: 10 };
+    };
+
+    // Which side is this tile on? Used for color-strip direction + text rotation
+    const getTileSide = (pos) => {
+        if (pos === 0 || pos === 9 || pos === 18 || pos === 27) return 'corner';
+        if (pos >= 1  && pos <= 8)  return 'bottom';
+        if (pos >= 10 && pos <= 17) return 'left';
+        if (pos >= 19 && pos <= 26) return 'top';
+        if (pos >= 28 && pos <= 35) return 'right';
+        return 'bottom';
+    };
+
+    // ── Emoji map ─────────────────────────────────────────────────────────
+    const tileEmoji = {
+        // Cities
+        'Mumbai':      '🏙️', 'Kolkata':     '🌉', 'Pune':        '🏛️',
+        'Delhi':       '🕌', 'Ahmedabad':   '🏺', 'Agra':        '🕍',
+        'Kanpur':      '🏭', 'Patna':       '🛕', 'Jaipur':      '🏰',
+        'Indore':      '🌆', 'Cochin':      '⚓', 'Chandigarh':  '🌸',
+        'Darjeeling':  '🍃', 'Ladakh':      '🏔️', 'Shimla':      '❄️',
+        'Chennai':     '🌊', 'Bangalore':   '💻', 'Hyderabad':   '💎',
+        'Amritsar':    '🛕', 'Goa':         '🏖️',
+        // Transport / Utility
+        'Railway':     '🚂', 'Electricity': '⚡', 'Airway':      '✈️',
+        'Waterway':    '🚢', 'Roadway':     '🛣️', 'Bus Bay':     '🚌',
+        // Special
+        'CHANCE':           '❓', 'COMMUNITY_CHEST': '🎁',
+        'INCOME_TAX':       '💸', 'WEALTH_TAX':      '💰',
+    };
+
+    const getTileEmoji = (tileInfo, tileName) => {
+        return tileEmoji[tileName] || tileEmoji[tileInfo?.type] || '🏠';
+    };
+
+    // ── Group color system (raw hex for inline styles) ────────────────────
+    const groupRawColor = {
+        'DARK_BLUE':    '#2563eb',
+        'GREEN':        '#059669',
+        'RED':          '#e11d48',
+        'YELLOW':       '#d97706',
+        'RAIL_ELECTRIC':'#e2e8f0',
+        'AIR_WATER':    '#0891b2',
+        'ROAD_BUS':     '#64748b',
+    };
+
+    const specialTileColor = {
+        'CHANCE':          '#7c3aed',
+        'COMMUNITY_CHEST': '#16a34a',
+        'INCOME_TAX':      '#dc2626',
+        'WEALTH_TAX':      '#b45309',
+    };
+
+    const getTileAccentColor = (propState, tileInfo) => {
+        if (propState?.group) return groupRawColor[propState.group] || '#475569';
+        // Special non-property tiles get no color accent
+        const noColorTypes = ['CHANCE', 'COMMUNITY_CHEST', 'INCOME_TAX', 'WEALTH_TAX'];
+        if (noColorTypes.includes(tileInfo?.type)) return 'transparent';
+        return specialTileColor[tileInfo?.type] || '#475569';
+    };
+
+    // ── Glass style per group ─────────────────────────────────────────────
+    const getGroupGlassStyle = (group) => {
+        const colorMap = {
+            'DARK_BLUE':    'rgba(37,99,235,0.22)',
+            'GREEN':        'rgba(5,150,105,0.22)',
+            'RED':          'rgba(225,29,72,0.22)',
+            'YELLOW':       'rgba(217,119,6,0.22)',
+            'RAIL_ELECTRIC':'rgba(226,232,240,0.14)',
+            'AIR_WATER':    'rgba(8,145,178,0.22)',
+            'ROAD_BUS':     'rgba(100,116,139,0.22)',
+        };
+        const base = colorMap[group] || 'rgba(30,41,59,0.22)';
+        return `linear-gradient(145deg, ${base} 0%, rgba(10,15,35,0.75) 100%)`;
+    };
+
+    const getNonPropGlassStyle = (type) => {
+        // CHANCE, COMMUNITY_CHEST, INCOME_TAX, WEALTH_TAX → pure dark glass, no color tint
+        return `linear-gradient(160deg, rgba(255,255,255,0.04) 0%, rgba(8,10,24,0.88) 100%)`;
     };
 
     // Handler helpers for actions
@@ -274,15 +502,29 @@ export default function GameBoard() {
     };
 
     return (
-        <div className="min-h-screen bg-transparent p-4 md:p-8 flex flex-col items-center justify-center w-full">
+        <div className="min-h-screen bg-transparent p-4 md:p-6 flex flex-col items-center justify-center w-full">
             {/* Top Info Bar */}
-            <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-between gap-4 mb-4">
+            <div className="w-full max-w-7xl flex flex-col md:flex-row items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-4">
-                    <img 
-                        src={`https://api.dicebear.com/7.x/pixel-art/svg?seed=${me.username}`} 
-                        alt="Me" 
-                        className="h-10 w-10 rounded-lg bg-slate-900 border border-purple-500/20"
-                    />
+                    {(() => {
+                        const myToken = localStorage.getItem(`vyapar_token_hex_${me.username}`);
+                        return myToken ? (
+                            <div className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0"
+                                style={{ backgroundColor: myToken, boxShadow: `0 0 10px 2px ${myToken}88` }}>
+                                <div className="flex gap-1 items-center">
+                                    <div className="bg-white rounded-full relative" style={{ width: 9, height: 9 }}>
+                                        <div className="bg-slate-900 rounded-full absolute" style={{ width: 5, height: 5, bottom: 1, left: '50%', transform: 'translateX(-50%)' }} />
+                                    </div>
+                                    <div className="bg-white rounded-full relative" style={{ width: 9, height: 9 }}>
+                                        <div className="bg-slate-900 rounded-full absolute" style={{ width: 5, height: 5, bottom: 1, left: '50%', transform: 'translateX(-50%)' }} />
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <img src={`https://api.dicebear.com/7.x/pixel-art/svg?seed=${me.username}`} alt="Me"
+                                className="h-10 w-10 rounded-lg bg-slate-900 border border-purple-500/20" />
+                        );
+                    })()}
                     <div className="text-left">
                         <h4 className="text-sm font-extrabold text-white m-0">{me.username} (You)</h4>
                         <p className="text-xs text-purple-400 font-bold m-0">Balance: ₹{me.balance}</p>
@@ -309,7 +551,7 @@ export default function GameBoard() {
             </div>
 
             {/* Main Game Container */}
-            <div className="w-full max-w-5xl grid md:grid-cols-3 gap-8 items-start">
+            <div className="w-full max-w-7xl grid md:grid-cols-3 gap-6 items-start">
                 
                 {/* 1. Player HUD (Left Panel) */}
                 <div className="flex flex-col gap-4">
@@ -318,10 +560,21 @@ export default function GameBoard() {
                         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 text-left mb-2">Players Status</h3>
                         {game.players.map(p => {
                             const isCurrentTurn = game.currentTurnPlayerId === p.playerId;
+                            const isMe = p.playerId === me.playerId;
+                            const isBankrupt = p.status === 'BANKRUPT';
+                            const isSelected = selectedPlayerForMenu?.playerId === p.playerId;
+
                             return (
                                 <div 
                                     key={p.playerId} 
-                                    className={`flex items-center justify-between rounded-xl p-3.5 border transition-all ${
+                                    onClick={() => {
+                                        if (!isMe && !isBankrupt) {
+                                            setSelectedPlayerForMenu(isSelected ? null : p);
+                                        }
+                                    }}
+                                    className={`flex flex-col rounded-xl p-3.5 border transition-all ${
+                                        !isMe && !isBankrupt ? 'cursor-pointer hover:border-slate-700' : ''
+                                    } ${
                                         isCurrentTurn 
                                             ? 'bg-purple-950/20 border-purple-500/50 glow-primary' 
                                             : p.status === 'BANKRUPT'
@@ -329,40 +582,205 @@ export default function GameBoard() {
                                                 : 'border-slate-800 bg-slate-900/30'
                                     }`}
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <div className="relative">
-                                            <img 
-                                                src={`https://api.dicebear.com/7.x/pixel-art/svg?seed=${p.username}`} 
-                                                alt={p.username} 
-                                                className="h-9 w-9 rounded-lg bg-slate-950/50 border border-slate-800 p-0.5"
-                                            />
-                                            {p.status === 'IN_JAIL' && (
-                                                <span className="absolute -bottom-1 -right-1 rounded-full bg-red-500 px-1 py-0.5 text-[8px] font-bold text-white uppercase">Jail</span>
-                                            )}
-                                            {p.status === 'RECOVERY' && (
-                                                <span className="absolute -bottom-1 -right-1 rounded-full bg-yellow-500 px-1 py-0.5 text-[8px] font-bold text-black uppercase">Liqu</span>
-                                            )}
-                                        </div>
-                                        <div className="text-left">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-sm font-semibold text-white">{p.username}</span>
-                                                {isCurrentTurn && <span className="flex h-1.5 w-1.5 rounded-full bg-purple-500 animate-ping"></span>}
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center gap-3">
+                                            <div className="relative">
+                                                {(() => {
+                                                    const tokenHex = localStorage.getItem(`vyapar_token_hex_${p.username}`);
+                                                    return tokenHex ? (
+                                                        <div
+                                                            className="h-9 w-9 rounded-full flex items-center justify-center flex-shrink-0"
+                                                            style={{ backgroundColor: tokenHex, boxShadow: `0 0 8px 2px ${tokenHex}66` }}
+                                                        >
+                                                            <div className="flex gap-1 items-center">
+                                                                <div className="bg-white rounded-full relative" style={{ width: 8, height: 8 }}>
+                                                                    <div className="bg-slate-900 rounded-full absolute" style={{ width: 4, height: 4, bottom: 1, left: '50%', transform: 'translateX(-50%)' }} />
+                                                                </div>
+                                                                <div className="bg-white rounded-full relative" style={{ width: 8, height: 8 }}>
+                                                                    <div className="bg-slate-900 rounded-full absolute" style={{ width: 4, height: 4, bottom: 1, left: '50%', transform: 'translateX(-50%)' }} />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <img
+                                                            src={`https://api.dicebear.com/7.x/pixel-art/svg?seed=${p.username}`}
+                                                            alt={p.username}
+                                                            className="h-9 w-9 rounded-lg bg-slate-950/50 border border-slate-800 p-0.5"
+                                                        />
+                                                    );
+                                                })()}
+                                                {p.status === 'IN_JAIL' && (
+                                                    <span className="absolute -bottom-1 -right-1 rounded-full bg-red-500 px-1 py-0.5 text-[8px] font-bold text-white uppercase">Jail</span>
+                                                )}
+                                                {p.status === 'RECOVERY' && (
+                                                    <span className="absolute -bottom-1 -right-1 rounded-full bg-yellow-500 px-1 py-0.5 text-[8px] font-bold text-black uppercase">Liqu</span>
+                                                )}
                                             </div>
-                                            <p className="text-xs text-slate-400">Pos: Tile #{p.position}</p>
+                                            <div className="text-left">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-sm font-semibold text-white">{p.username}</span>
+                                                    {isCurrentTurn && <span className="flex h-1.5 w-1.5 rounded-full bg-purple-500 animate-ping"></span>}
+                                                </div>
+                                                <p className="text-xs text-slate-400">Pos: Tile #{p.position}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="text-right">
+                                            {p.status === 'BANKRUPT' ? (
+                                                <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Bankrupt</span>
+                                            ) : (
+                                                <span className="text-sm font-bold text-purple-400">₹{p.balance.toLocaleString()}</span>
+                                            )}
                                         </div>
                                     </div>
 
-                                    <div className="text-right">
-                                        {p.status === 'BANKRUPT' ? (
-                                            <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Bankrupt</span>
-                                        ) : (
-                                            <span className="text-sm font-bold text-purple-400">₹{p.balance}</span>
-                                        )}
-                                    </div>
+                                    {/* Inline options for trading */}
+                                    {isSelected && (
+                                        <div className="mt-2.5 pt-2.5 border-t border-slate-800/80 flex justify-end gap-2 w-full">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setTradePartner(p);
+                                                    setOfferedCash(0);
+                                                    setRequestedCash(0);
+                                                    setOfferedProperties([]);
+                                                    setRequestedProperties([]);
+                                                    setShowTradeModal(true);
+                                                    setSelectedPlayerForMenu(null);
+                                                }}
+                                                className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-[10px] font-bold text-white transition-all cursor-pointer"
+                                            >
+                                                Trade
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedPlayerForMenu(null);
+                                                }}
+                                                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-slate-300 transition-all cursor-pointer"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
+
+                    {/* Pending Trade Proposals Section */}
+                    {pendingTrades.length > 0 && (
+                        <div className="glass-premium rounded-2xl p-6 flex flex-col gap-4">
+                            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 text-left mb-2 flex items-center gap-1.5">
+                                <span>🤝 Trade Proposals</span>
+                                <span className="bg-purple-500/20 text-purple-400 border border-purple-500/20 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                                    {pendingTrades.length}
+                                </span>
+                            </h3>
+                            <div className="space-y-3.5 max-h-72 overflow-y-auto pr-1">
+                                {pendingTrades.map(trade => {
+                                    const isIncoming = trade.receiverId === me.playerId;
+                                    const proposerName = trade.proposerName;
+                                    const receiverName = trade.receiverName;
+
+                                    return (
+                                        <div key={trade.tradeId} className="border border-slate-800 bg-slate-950/20 rounded-xl p-3.5 space-y-3 text-left">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                                                    {isIncoming ? "Incoming Offer" : "Outgoing Proposal"}
+                                                </span>
+                                                <span className="text-[9px] text-slate-500 font-mono">
+                                                    {new Date(trade.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                            </div>
+
+                                            <div className="text-xs text-slate-350 space-y-1.5">
+                                                {isIncoming ? (
+                                                    <p className="font-semibold text-white">{proposerName} offers:</p>
+                                                ) : (
+                                                    <p className="font-semibold text-white">You offered to {receiverName}:</p>
+                                                )}
+
+                                                <div className="bg-slate-950/40 p-2 rounded-lg space-y-1 text-slate-300 font-medium">
+                                                    {trade.offeredCash > 0 && (
+                                                        <div className="flex justify-between">
+                                                            <span>• Cash:</span>
+                                                            <span className="font-bold text-emerald-400">₹{trade.offeredCash.toLocaleString()}</span>
+                                                        </div>
+                                                    )}
+                                                    {trade.offeredProperties.length > 0 && (
+                                                        <div className="space-y-1">
+                                                            <div className="text-[9px] text-slate-500 uppercase tracking-widest font-black mt-0.5">Properties:</div>
+                                                            {trade.offeredProperties.map(id => (
+                                                                <div key={id} className="flex items-center gap-1.5 pl-1 text-white">
+                                                                    <div className={`w-2 h-2 rounded-full ${groupColors[propertyCatalogById[id]?.group] || 'bg-slate-750'}`} />
+                                                                    <span>{propertyCatalogById[id]?.name}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {trade.offeredCash === 0 && trade.offeredProperties.length === 0 && (
+                                                        <span className="italic text-slate-500">• Nothing offered</span>
+                                                    )}
+                                                </div>
+
+                                                <p className="font-semibold text-white mt-2">In exchange for:</p>
+
+                                                <div className="bg-slate-950/40 p-2 rounded-lg space-y-1 text-slate-300 font-medium">
+                                                    {trade.requestedCash > 0 && (
+                                                        <div className="flex justify-between">
+                                                            <span>• Cash:</span>
+                                                            <span className="font-bold text-amber-400">₹{trade.requestedCash.toLocaleString()}</span>
+                                                        </div>
+                                                    )}
+                                                    {trade.requestedProperties.length > 0 && (
+                                                        <div className="space-y-1">
+                                                            <div className="text-[9px] text-slate-500 uppercase tracking-widest font-black mt-0.5">Properties:</div>
+                                                            {trade.requestedProperties.map(id => (
+                                                                <div key={id} className="flex items-center gap-1.5 pl-1 text-white">
+                                                                    <div className={`w-2 h-2 rounded-full ${groupColors[propertyCatalogById[id]?.group] || 'bg-slate-750'}`} />
+                                                                    <span>{propertyCatalogById[id]?.name}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {trade.requestedCash === 0 && trade.requestedProperties.length === 0 && (
+                                                        <span className="italic text-slate-500">• Nothing requested</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-2 pt-1">
+                                                {isIncoming ? (
+                                                    <>
+                                                        <button
+                                                            onClick={() => acceptTrade(trade.tradeId)}
+                                                            className="flex-1 bg-emerald-650 hover:bg-emerald-600 text-white font-bold text-[10px] py-1.5 rounded-lg transition-colors cursor-pointer"
+                                                        >
+                                                            Accept
+                                                        </button>
+                                                        <button
+                                                            onClick={() => rejectTrade(trade.tradeId)}
+                                                            className="flex-1 bg-red-950/30 border border-red-500/30 hover:bg-red-500 hover:text-white text-red-450 font-bold text-[10px] py-1.5 rounded-lg transition-all cursor-pointer"
+                                                        >
+                                                            Reject
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => cancelTrade(trade.tradeId)}
+                                                        className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[10px] py-1.5 rounded-lg transition-colors cursor-pointer"
+                                                    >
+                                                        Cancel Offer
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Unowned Property Details Card */}
                     {showUnownedCard && (
@@ -375,20 +793,15 @@ export default function GameBoard() {
                                 </span>
                             </div>
 
-                            {/* City Image (1:1 square aspect ratio layout) */}
-                            {!isUnownedPropImgError ? (
-                                <img 
-                                    src={getPropertyImagePath(turnPlayerProperty.name || turnPlayerProperty.propertyName)} 
-                                    onError={() => setUnownedPropImgError(unownedPropImgKey)}
-                                    className="w-full h-36 object-cover border-b border-slate-800/60"
-                                    alt={turnPlayerProperty.name || turnPlayerProperty.propertyName}
-                                />
-                            ) : (
-                                <div className="w-full h-16 bg-gradient-to-br from-slate-900 to-slate-950 flex items-center justify-center border-b border-slate-800/60 text-slate-700 font-extrabold text-lg">
-                                    {turnPlayerProperty.name?.substring(0, 1) || turnPlayerProperty.propertyName?.substring(0, 1)}
-                                </div>
-                            )}
-
+                            {/* Glass body with emoji */}
+                            <div className="w-full h-20 flex flex-col items-center justify-center gap-1 border-b border-slate-800/60"
+                                style={{ background: getGroupGlassStyle(turnPlayerProperty.group) }}
+                            >
+                                <span className="text-3xl leading-none">{getTileEmoji({type: turnPlayerProperty.type}, turnPlayerProperty.name || turnPlayerProperty.propertyName)}</span>
+                                <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                                    {(turnPlayerProperty.name || turnPlayerProperty.propertyName || '?')}
+                                </span>
+                            </div>
                             <div className="p-4 space-y-3.5 text-left">
                                 <div className="space-y-1.5 text-[11px] text-slate-300">
                                     {turnPlayerProperty.rent ? (
@@ -449,146 +862,310 @@ export default function GameBoard() {
                 </div>
 
                 {/* 2. Board Grid & Center Hub (Center & Right Panel span 2 cols) */}
-                <div className="md:col-span-2 relative bg-[#383636] border border-slate-800 rounded-3xl overflow-hidden p-2.5 shadow-2xl">
+                <div className="md:col-span-2 relative bg-[#080a14] border border-white/5 rounded-2xl overflow-hidden p-1.5 shadow-[0_0_80px_rgba(0,0,0,0.9)]">
                     <div className="board-grid relative">
-                        
+
                         {/* Render 36 Tiles */}
                         {Array.from({ length: 36 }).map((_, idx) => {
-                            const gridStyle = getGridArea(idx);
-                            const isCorner = idx === 0 || idx === 9 || idx === 18 || idx === 27;
+                            const side = getTileSide(idx);
+                            const isCorner = side === 'corner';
                             const tileInfo = boardData[idx];
                             if (!tileInfo) return null;
-                            const propState = getTileDesc(tileInfo);
-                            const playersOnTile = getPlayersOnTile(idx);
-                            const tileName = getTileName(tileInfo, propState);
-                            const tileMeta = getTileMeta(tileInfo, propState);
+                            const propState   = getTileDesc(tileInfo);
+                            const playersHere = getPlayersOnTile(idx);
+                            const tileName    = getTileName(tileInfo, propState);
+                            const tileMeta    = getTileMeta(tileInfo, propState);
+                            const accentColor = getTileAccentColor(propState, tileInfo);
+                            const ownerColor  = propState?.ownerId ? getPlayerRawColor(propState.ownerId) : null;
 
-                            const ownerColorClass = propState && propState.ownerId ? getOwnerColorClass(propState.ownerId) : '';
+                            // ── glass bg: faint color + dark overlay ─────────────────
+                            const glassStyle = propState
+                                ? getGroupGlassStyle(propState.group)
+                                : getNonPropGlassStyle(tileInfo.type);
+
+                            // ── layout per side ───────────────────────────────────────
+                            // bottom tiles (pos 1-8): name at top-left, price badge bottom-right
+                            // top tiles (pos 19-26) : name at bottom-left, price badge top-right
+                            // left tiles (pos 10-17): text rotated 180°, name at bottom, price at top
+                            // right tiles (pos 28-35): text rotated 0° (vertical-rl), name at top, price at bottom
+                            const isVertical = side === 'left' || side === 'right';
+
+                            // Corner positions use getGridArea, non-corners use custom board-grid class
+                            const gridStyle = getGridArea(idx);
 
                             return (
-                                <div 
+                                <div
                                     key={idx}
-                                    style={gridStyle}
-                                    className={`relative flex flex-col justify-between overflow-hidden select-none transition-all duration-200 hover:bg-slate-800/40 hover:scale-[1.02] hover:z-20 cursor-pointer ${
-                                        isCorner 
-                                            ? 'bg-slate-900 text-slate-100 font-black border border-slate-800 shadow-[inset_0_0_10px_rgba(0,0,0,0.2)]' 
-                                            : `bg-slate-950/95 text-slate-200 shadow-[inset_0_0_6px_rgba(0,0,0,0.15)] ${
-                                                ownerColorClass ? `border-[6px] ${ownerColorClass}` : 'border border-slate-900/60'
-                                              }`
-                                    }`}
-                                    onClick={() => {
-                                        if (propState) {
-                                            setSelectedProperty(propState);
-                                        }
+                                    style={{
+                                        ...gridStyle,
+                                        borderRadius: isCorner ? '0px' : '6px',
                                     }}
+                                    className={`relative overflow-hidden select-none cursor-pointer transition-all duration-150
+                                        hover:brightness-125 hover:z-20
+                                        ${isCorner
+                                            ? 'bg-[#0d1020] border border-white/10'
+                                            : 'border border-white/[0.07]'
+                                        }`}
+                                    onClick={() => { if (propState) setSelectedProperty(propState); }}
                                 >
-                                    {/* For Properties: Colored Header with Name */}
-                                    {propState ? (
-                                        <div className="w-full flex flex-col h-full justify-between z-10 relative">
-                                            {/* Top Bar: group color background, name inside */}
-                                            <div className={`w-full py-0.5 px-0.5 text-center ${groupColors[propState.group] || 'bg-slate-600'} text-slate-950 font-black uppercase text-[5.5px] leading-tight truncate z-10 relative border-b border-slate-950/20`}>
-                                                {tileName}
-                                            </div>
+                                    {/* ══ CORNER TILES ══ */}
+                                    {isCorner ? (
+                                        <>
+                                            <img
+                                                src={getPropertyImagePath(tileInfo.name || tileName, tileInfo.type)}
+                                                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0"
+                                                onError={e => { e.target.style.display = 'none'; }}
+                                                alt=""
+                                            />
+                                            {playersHere.length > 0 && (
+                                                <div className="absolute inset-0 flex items-center justify-center z-20">
+                                                    <div className="flex -space-x-2">
+                                                        {playersHere.map(p => (
+                                                            <BoardToken key={p.playerId} username={p.username} size={39} />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        /* ══ NON-CORNER TILES ══ */
+                                        <>
+                                            {/* Layer 1 – faint solid color fill (the "color strip behind glass") */}
+                                            <div
+                                                className="absolute inset-0"
+                                                style={{ backgroundColor: accentColor, opacity: 0.38 }}
+                                            />
 
-                                            {/* Body/Image container */}
-                                            <div className="flex-1 w-full relative overflow-hidden flex flex-col justify-between p-0.5">
-                                                {/* Tile Image */}
-                                                <img 
-                                                    src={getPropertyImagePath(tileInfo.name || tileName, tileInfo.type)} 
-                                                    className="absolute inset-0 w-full h-full object-cover opacity-100 pointer-events-none transition-opacity duration-300 z-0"
-                                                    onError={(e) => { e.target.style.display = 'none'; }}
-                                                    alt=""
+                                            {/* Layer 2 – glass morphism overlay */}
+                                            <div
+                                                className="absolute inset-0"
+                                                style={{
+                                                    background: 'linear-gradient(160deg, rgba(255,255,255,0.07) 0%, rgba(10,12,28,0.58) 100%)',
+                                                    backdropFilter: 'blur(6px)',
+                                                    WebkitBackdropFilter: 'blur(6px)',
+                                                    border: 'none',
+                                                }}
+                                            />
+
+                                            {/* Layer 3 – ownership fill: 20% of card area on OPPOSITE edge from color strip */}
+                                            {ownerColor && (
+                                                <div
+                                                    className="absolute z-[5]"
+                                                    style={{
+                                                        backgroundColor: ownerColor,
+                                                        opacity: 0.82,
+                                                        // opposite edge from the accent strip, fills 20% of the card
+                                                        ...(side === 'bottom' ? { top: 0,    left: 0, right: 0, height: '20%', borderRadius: '6px 6px 0 0' } : {}),
+                                                        ...(side === 'top'    ? { bottom: 0, left: 0, right: 0, height: '20%', borderRadius: '0 0 6px 6px' } : {}),
+                                                        ...(side === 'left'   ? { right: 0,  top: 0,  bottom: 0, width: '20%', borderRadius: '0 6px 6px 0' } : {}),
+                                                        ...(side === 'right'  ? { left: 0,   top: 0,  bottom: 0, width: '20%', borderRadius: '6px 0 0 6px' } : {}),
+                                                    }}
                                                 />
+                                            )}
 
-                                                {/* Possession Color Overlay (30% opacity of player badge color) */}
-                                                {propState.ownerId && (
-                                                    <div className={`absolute inset-0 ${getPlayerBgColorClass(propState.ownerId)} pointer-events-none z-5`} />
-                                                )}
-
-                                                {/* Price overlay at the bottom */}
-                                                <div className="w-full flex flex-col items-center mt-auto z-10 relative">
-                                                    {tileMeta && (
-                                                        <span className="text-[6px] font-black leading-none text-white bg-slate-950/85 px-1 py-0.5 rounded shadow-[0_1px_3px_rgba(0,0,0,0.5)]">
-                                                            {tileMeta}
-                                                        </span>
+                                            {/* ── HORIZONTAL TILES (bottom row pos 1-8, top row pos 19-26) ── */}
+                                            {!isVertical && (
+                                                <div className="absolute inset-0 z-10 flex flex-col justify-between p-1">
+                                                    {/* Name at the top for bottom-row, bottom for top-row */}
+                                                    {side === 'bottom' && (
+                                                        <>
+                                                            <span
+                                                                className="text-white leading-tight w-full text-center"
+                                                                style={{
+                                                                    fontFamily: "'Oswald', sans-serif",
+                                                                    fontSize: 'clamp(7px, 1.1vw, 13px)',
+                                                                    textShadow: '0 1px 5px rgba(0,0,0,1)',
+                                                                    display: '-webkit-box',
+                                                                    WebkitLineClamp: 2,
+                                                                    WebkitBoxOrient: 'vertical',
+                                                                    overflow: 'hidden',
+                                                                    letterSpacing: '0.01em',
+                                                                    fontWeight: '600',
+                                                                    lineHeight: 1.1,
+                                                                }}
+                                                            >
+                                                                {tileName}
+                                                            </span>
+                                                            {/* dev level */}
+                                                            {propState?.developmentLevel > 0 && (
+                                                                <span className="text-center leading-none" style={{ fontSize: '10px' }}>
+                                                                    {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
+                                                                </span>
+                                                            )}
+                                                            {tileMeta && (
+                                                                <span
+                                                                    className="self-center text-white leading-none rounded-sm px-1 py-0.5"
+                                                                    style={{
+                                                                        fontFamily: "'Oswald', sans-serif",
+                                                                        fontSize: 'clamp(6px, 0.9vw, 11px)',
+                                                                        fontWeight: '600',
+                                                                        background: 'rgba(0,0,0,0.60)',
+                                                                        border: `1px solid ${accentColor}66`,
+                                                                        boxShadow: `0 0 6px ${accentColor}55`,
+                                                                        letterSpacing: '0.02em',
+                                                                        whiteSpace: 'nowrap',
+                                                                    }}
+                                                                >
+                                                                    {tileMeta}
+                                                                </span>
+                                                            )}
+                                                        </>
                                                     )}
-                                                    
-                                                    {/* Owner name */}
-                                                    {propState.ownerId && (
-                                                        <span className="text-[5px] rounded bg-purple-950/90 text-purple-300 px-0.5 border border-purple-500/20 mt-0.5 scale-90 font-bold">
+                                                    {side === 'top' && (
+                                                        <>
+                                                            {tileMeta && (
+                                                                <span
+                                                                    className="self-center text-white leading-none rounded-sm px-1 py-0.5"
+                                                                    style={{
+                                                                        fontFamily: "'Oswald', sans-serif",
+                                                                        fontSize: 'clamp(6px, 0.9vw, 11px)',
+                                                                        fontWeight: '600',
+                                                                        background: 'rgba(0,0,0,0.60)',
+                                                                        border: `1px solid ${accentColor}66`,
+                                                                        boxShadow: `0 0 6px ${accentColor}55`,
+                                                                        letterSpacing: '0.02em',
+                                                                        whiteSpace: 'nowrap',
+                                                                    }}
+                                                                >
+                                                                    {tileMeta}
+                                                                </span>
+                                                            )}
+                                                            {propState?.developmentLevel > 0 && (
+                                                                <span className="text-center leading-none" style={{ fontSize: '10px' }}>
+                                                                    {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
+                                                                </span>
+                                                            )}
+                                                            <span
+                                                                className="text-white leading-tight w-full text-center"
+                                                                style={{
+                                                                    fontFamily: "'Oswald', sans-serif",
+                                                                    fontSize: 'clamp(7px, 1.1vw, 13px)',
+                                                                    fontWeight: '600',
+                                                                    textShadow: '0 1px 5px rgba(0,0,0,1)',
+                                                                    display: '-webkit-box',
+                                                                    WebkitLineClamp: 2,
+                                                                    WebkitBoxOrient: 'vertical',
+                                                                    overflow: 'hidden',
+                                                                    letterSpacing: '0.01em',
+                                                                    lineHeight: 1.1,
+                                                                }}
+                                                            >
+                                                                {tileName}
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                    {/* owner badge */}
+                                                    {propState?.ownerId && (
+                                                        <span
+                                                            className="absolute top-0.5 right-0.5 rounded text-purple-300 font-black border border-purple-500/30 leading-none"
+                                                            style={{ fontSize: '5px', padding: '1px 2px', background: 'rgba(0,0,0,0.7)' }}
+                                                        >
                                                             {getOwnerName(propState.ownerId)}
                                                         </span>
                                                     )}
+                                                </div>
+                                            )}
 
-                                                    {/* Development Level */}
-                                                    {propState.developmentLevel > 0 && (
-                                                        <div className={`text-[8px] font-black flex gap-0.5 items-center mt-0.5 bg-slate-950/85 px-1 py-0.5 rounded border border-slate-900 shadow-sm ${getPlayerColorClass(propState.ownerId)}`}>
-                                                            {propState.developmentLevel === 4 ? (
-                                                                <>
-                                                                    <Building2 className="h-3 w-3" />
-                                                                    <span className="text-[5px] font-black ml-0.5 text-white">HOTEL</span>
-                                                                </>
-                                                            ) : propState.developmentLevel === 1 ? (
-                                                                <HomeIcon className="h-3 w-3" />
-                                                            ) : (
-                                                                <>
-                                                                    <HomeIcon className="h-3 w-3" />
-                                                                    <span className="text-[7.5px] font-black ml-0.5 text-white">*{propState.developmentLevel}</span>
-                                                                </>
-                                                            )}
-                                                        </div>
+                                            {/* ── VERTICAL TILES (left col pos 10-17, right col pos 28-35) ── */}
+                                            {isVertical && (
+                                                <div className="absolute inset-0 z-10">
+                                                    {/* Name — on the LEFT edge, rotated */}
+                                                    <span
+                                                        className="absolute text-white leading-none tracking-wide"
+                                                        style={{
+                                                            fontFamily: "'Oswald', sans-serif",
+                                                            fontSize: 'clamp(7px, 1vw, 12px)',
+                                                            fontWeight: '600',
+                                                            textShadow: '0 1px 4px rgba(0,0,0,1)',
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            maxWidth: '88%',
+                                                            left: '4px',
+                                                            top: '50%',
+                                                            transform: 'translateY(-50%) rotate(-90deg)',
+                                                            transformOrigin: 'center center',
+                                                            letterSpacing: '0.01em',
+                                                        }}
+                                                    >
+                                                        {tileName}
+                                                    </span>
+
+                                                    {/* Price pill — on the RIGHT edge */}
+                                                    {tileMeta && (
+                                                        <span
+                                                            className="absolute text-white leading-none rounded-sm"
+                                                            style={{
+                                                                fontFamily: "'Oswald', sans-serif",
+                                                                fontSize: 'clamp(6px, 0.85vw, 10px)',
+                                                                fontWeight: '600',
+                                                                padding: '2px 3px',
+                                                                background: 'rgba(0,0,0,0.60)',
+                                                                border: `1px solid ${accentColor}66`,
+                                                                boxShadow: `0 0 6px ${accentColor}55`,
+                                                                whiteSpace: 'nowrap',
+                                                                right: '4px',
+                                                                top: '50%',
+                                                                transform: 'translateY(-50%) rotate(90deg)',
+                                                                transformOrigin: 'center center',
+                                                            }}
+                                                        >
+                                                            {tileMeta}
+                                                        </span>
+                                                    )}
+
+                                                    {/* Dev level — centered */}
+                                                    {propState?.developmentLevel > 0 && (
+                                                        <span
+                                                            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+                                                            style={{ fontSize: '10px', lineHeight: 1 }}
+                                                        >
+                                                            {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
+                                                        </span>
+                                                    )}
+
+                                                    {/* Owner badge — top center */}
+                                                    {propState?.ownerId && (
+                                                        <span
+                                                            className="absolute top-0.5 left-1/2 -translate-x-1/2 rounded text-purple-300 font-black border border-purple-500/30 leading-none whitespace-nowrap"
+                                                            style={{ fontSize: '5px', padding: '1px 2px', background: 'rgba(0,0,0,0.7)', fontFamily: "'Oswald', sans-serif" }}
+                                                        >
+                                                            {getOwnerName(propState.ownerId)}
+                                                        </span>
                                                     )}
                                                 </div>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        // For Non-Properties (Corners, Chance, Chest, Tax): Standard render
-                                        <>
-                                            {/* Tile Image */}
-                                            <img 
-                                                src={getPropertyImagePath(tileInfo.name || tileName, tileInfo.type)} 
-                                                className="absolute inset-0 w-full h-full object-cover opacity-100 pointer-events-none transition-opacity duration-300 z-0"
-                                                onError={(e) => { e.target.style.display = 'none'; }}
-                                                alt=""
+                                            )}
+
+                                            {/* Glowing edge strip — the group color accent line */}
+                                            <div
+                                                className="absolute z-20"
+                                                style={{
+                                                    backgroundColor: accentColor,
+                                                    boxShadow: `0 0 10px 2px ${accentColor}88`,
+                                                    ...(side === 'bottom' ? { bottom: 0, left: 0, right: 0, height: '6px' } : {}),
+                                                    ...(side === 'top'    ? { top: 0,    left: 0, right: 0, height: '6px' } : {}),
+                                                    ...(side === 'left'   ? { left: 0,   top: 0,  bottom: 0, width: '6px' } : {}),
+                                                    ...(side === 'right'  ? { right: 0,  top: 0,  bottom: 0, width: '6px' } : {}),
+                                                }}
                                             />
 
-                                            <div className="flex-1 flex flex-col justify-between items-center text-center p-0.5 z-10 relative h-full">
-                                                {tileInfo.type !== 'INCOME_TAX' && tileInfo.type !== 'WEALTH_TAX' && (
-                                                    <>
-                                                        <span className="text-[7px] font-extrabold tracking-tight leading-none text-slate-100 w-full uppercase line-clamp-2 mt-1.5 bg-slate-950/75 px-1 py-0.5 rounded shadow-sm border border-slate-800/40">
-                                                            {tileName}
-                                                        </span>
-                                                        {tileMeta && (
-                                                            <span className="text-[6px] font-bold leading-none text-slate-300 mb-1 bg-slate-950/75 px-1 py-0.5 rounded shadow-sm border border-slate-800/40 mt-auto">
-                                                                {tileMeta}
-                                                            </span>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Stack Players' Tokens (absolute overlay on the bottom) */}
-                                    {playersOnTile.length > 0 && (
-                                        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex -space-x-1 z-20">
-                                            {playersOnTile.map(p => (
-                                                <div 
-                                                    key={p.playerId}
-                                                    className={`h-6.5 w-6.5 rounded-lg border border-slate-950 shadow-md flex items-center justify-center text-[11px] font-black uppercase ${getPlayerBadgeClass(p.playerId)}`}
-                                                    title={p.username}
-                                                >
-                                                    {p.username.substring(0, 1)}
+                                            {/* Player tokens */}
+                                            {playersHere.length > 0 && (
+                                                <div className="absolute inset-0 flex items-center justify-center z-30">
+                                                    <div className="flex -space-x-1.5">
+                                                        {playersHere.map(p => (
+                                                            <BoardToken key={p.playerId} username={p.username} size={30} />
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            ))}
-                                        </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             );
                         })}
 
                         {/* 3. Center Control Hub (Col 2-9, Row 2-9) */}
-                        <div className="grid-in-center bg-[#383636] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between shadow-inner" style={{ gridArea: "2 / 2 / 10 / 10" }}>
+                        <div className="grid-in-center border border-slate-800/50 rounded-2xl p-4 flex flex-col justify-between shadow-inner" style={{ gridArea: "2 / 2 / 10 / 10", background: 'rgba(8,10,22,0.92)' }}>
                             
                             {/* Inner Header Tabs */}
                             <div className="flex border-b border-slate-800 pb-2 mb-2 justify-between">
@@ -627,17 +1204,12 @@ export default function GameBoard() {
                                         {/* Render Dice Results */}
                                         {dice && (
                                             <div className="flex flex-col items-center animate-roll">
-                                                <div className="flex gap-3 items-center">
-                                                    <div className="h-10 w-10 bg-slate-900 border border-purple-500/30 text-white rounded-lg flex items-center justify-center font-black text-lg shadow-[0_0_12px_rgba(168,85,247,0.25)]">
-                                                        {dice.diceOne}
-                                                    </div>
-                                                    <span className="text-slate-500 font-bold">+</span>
-                                                    <div className="h-10 w-10 bg-slate-900 border border-purple-500/30 text-white rounded-lg flex items-center justify-center font-black text-lg shadow-[0_0_12px_rgba(168,85,247,0.25)]">
-                                                        {dice.diceTwo}
-                                                    </div>
+                                                <div className="flex gap-4 items-center">
+                                                    <DiceFace value={dice.diceOne} isDouble={dice.isDouble} />
+                                                    <DiceFace value={dice.diceTwo} isDouble={dice.isDouble} />
                                                 </div>
-                                                <p className="text-xs text-purple-300 font-bold mt-1.5">
-                                                    Dice Total: {dice.total} {dice.isDouble && "(Double!)"}
+                                                <p className="text-xs text-purple-300 font-bold mt-2">
+                                                    Total: {dice.total} {dice.isDouble && <span className="text-yellow-400 ml-1">Double!</span>}
                                                 </p>
                                             </div>
                                         )}
@@ -753,7 +1325,7 @@ export default function GameBoard() {
 
                                 {activeTab === 'logs' && (
                                     <div className="space-y-1.5 text-left font-mono text-[10px]">
-                                        {logs.map((log, i) => (
+                                        {[...logs].reverse().map((log, i) => (
                                             <div key={i} className="text-slate-300 border-l-2 border-purple-500/40 pl-2 leading-relaxed font-medium">
                                                 {log}
                                             </div>
@@ -783,19 +1355,15 @@ export default function GameBoard() {
                             </span>
                         </div>
 
-                        {/* City Image (1:1 square aspect ratio layout) */}
-                        {!isSelectedPropImgError ? (
-                            <img 
-                                src={getPropertyImagePath(selectedProperty.propertyName || selectedProperty.name)} 
-                                onError={() => setSelectedPropImgError(selectedPropImgKey)}
-                                className="w-full h-48 object-cover border-b border-slate-800/60"
-                                alt={selectedProperty.propertyName || selectedProperty.name}
-                            />
-                        ) : (
-                            <div className="w-full h-24 bg-gradient-to-br from-slate-900 to-slate-950 flex items-center justify-center border-b border-slate-800/60 text-slate-700 font-extrabold text-2xl">
-                                {selectedProperty.propertyName?.substring(0, 1) || selectedProperty.name?.substring(0, 1)}
-                            </div>
-                        )}
+                        {/* Glass panel with emoji */}
+                        <div className="w-full h-24 flex flex-col items-center justify-center gap-1.5 border-b border-slate-800/60"
+                            style={{ background: getGroupGlassStyle(selectedProperty.group) }}
+                        >
+                            <span className="text-4xl leading-none">{getTileEmoji({type: selectedProperty.type}, selectedProperty.propertyName || selectedProperty.name)}</span>
+                            <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest">
+                                {selectedProperty.propertyName || selectedProperty.name}
+                            </span>
+                        </div>
 
                         <div className="p-6">
                             {/* Estate Details */}
@@ -1011,6 +1579,243 @@ export default function GameBoard() {
                                 className="w-full rounded-lg border border-red-500/30 bg-red-950/15 py-3 text-xs font-bold text-red-400 hover:bg-red-500 hover:text-white transition-all cursor-pointer"
                             >
                                 Declare Bankruptcy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 6. Trade Proposal Modal */}
+            {showTradeModal && tradePartner && (
+                <div className="fixed inset-0 flex items-center justify-center bg-black/85 backdrop-blur-md z-40 p-4 animate-fade-in animate-duration-200">
+                    <div className="glass-premium border border-purple-500/30 rounded-3xl p-6 max-w-2xl w-full flex flex-col gap-5 max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                            <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                                <span>🤝 Propose Trade to {tradePartner.username}</span>
+                            </h2>
+                            <button
+                                onClick={() => {
+                                    setShowTradeModal(false);
+                                    setTradePartner(null);
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer text-sm"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Cash Sliders */}
+                        <div className="space-y-4 bg-slate-950/40 p-4 rounded-2xl border border-slate-900">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 text-left">Cash Adjustment</h3>
+                            
+                            {/* Offered Cash */}
+                            <div className="space-y-2 text-left">
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-purple-400 font-medium">Offered Cash (Your balance: ₹{me.balance.toLocaleString()})</span>
+                                    <span className="font-bold text-white">₹{offeredCash.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max={me.balance}
+                                        step="100"
+                                        value={offeredCash}
+                                        onChange={(e) => setOfferedCash(Number(e.target.value))}
+                                        className="w-full accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+                                    />
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max={me.balance}
+                                        value={offeredCash}
+                                        onChange={(e) => {
+                                            const val = Math.min(me.balance, Math.max(0, Number(e.target.value)));
+                                            setOfferedCash(val);
+                                        }}
+                                        className="w-24 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-mono text-right"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Requested Cash */}
+                            <div className="space-y-2 text-left">
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-amber-400 font-medium">Requested Cash ({tradePartner.username}'s balance: ₹{tradePartner.balance.toLocaleString()})</span>
+                                    <span className="font-bold text-white">₹{requestedCash.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max={tradePartner.balance}
+                                        step="100"
+                                        value={requestedCash}
+                                        onChange={(e) => setRequestedCash(Number(e.target.value))}
+                                        className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+                                    />
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max={tradePartner.balance}
+                                        value={requestedCash}
+                                        onChange={(e) => {
+                                            const val = Math.min(tradePartner.balance, Math.max(0, Number(e.target.value)));
+                                            setRequestedCash(val);
+                                        }}
+                                        className="w-24 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white font-mono text-right"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Properties Lists */}
+                        <div className="grid md:grid-cols-2 gap-4">
+                            {/* Offered Properties (My properties) */}
+                            <div className="border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 bg-slate-900/10">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-400 text-left">Your Offered Properties</h3>
+                                <div className="overflow-y-auto max-h-48 space-y-2 pr-1">
+                                    {game.properties.filter(p => p.ownerId === me.playerId).length === 0 ? (
+                                        <p className="text-xs text-slate-500 italic py-4">No properties owned</p>
+                                    ) : (
+                                        game.properties.filter(p => p.ownerId === me.playerId).map(p => {
+                                            const catalog = propertyCatalogById[p.propertyId];
+                                            const isImproved = isColorGroupImproved(catalog?.group);
+                                            const isChecked = offeredProperties.includes(p.propertyId);
+
+                                            return (
+                                                <label
+                                                    key={p.propertyId}
+                                                    className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer select-none transition-all ${
+                                                        isChecked 
+                                                            ? 'bg-purple-950/20 border-purple-500/50 text-white font-semibold' 
+                                                            : isImproved 
+                                                                ? 'border-slate-900 text-slate-600 opacity-50 cursor-not-allowed'
+                                                                : 'border-slate-800/80 hover:bg-slate-800/30 text-slate-300'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2.5">
+                                                        <input
+                                                            type="checkbox"
+                                                            disabled={isImproved}
+                                                            checked={isChecked}
+                                                            onChange={() => {
+                                                                if (isChecked) {
+                                                                    setOfferedProperties(prev => prev.filter(id => id !== p.propertyId));
+                                                                } else {
+                                                                    setOfferedProperties(prev => [...prev, p.propertyId]);
+                                                                }
+                                                            }}
+                                                            className="accent-purple-500 rounded cursor-pointer"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`w-3 h-3 rounded-full ${groupColors[catalog?.group] || 'bg-slate-700'}`} />
+                                                            <span>{catalog?.name || p.propertyName}</span>
+                                                            {p.mortgaged && (
+                                                                <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/20 px-1 rounded uppercase font-extrabold scale-90">Mortgaged</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {isImproved && (
+                                                        <span className="text-[9px] text-red-400 font-bold">Has Houses</span>
+                                                    )}
+                                                </label>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Requested Properties (Their properties) */}
+                            <div className="border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 bg-slate-900/10">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 text-left">{tradePartner.username}'s Requested Properties</h3>
+                                <div className="overflow-y-auto max-h-48 space-y-2 pr-1">
+                                    {game.properties.filter(p => p.ownerId === tradePartner.playerId).length === 0 ? (
+                                        <p className="text-xs text-slate-500 italic py-4">No properties owned</p>
+                                    ) : (
+                                        game.properties.filter(p => p.ownerId === tradePartner.playerId).map(p => {
+                                            const catalog = propertyCatalogById[p.propertyId];
+                                            const isImproved = isColorGroupImproved(catalog?.group);
+                                            const isChecked = requestedProperties.includes(p.propertyId);
+
+                                            return (
+                                                <label
+                                                    key={p.propertyId}
+                                                    className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer select-none transition-all ${
+                                                        isChecked 
+                                                            ? 'bg-amber-950/20 border-amber-500/50 text-white font-semibold' 
+                                                            : isImproved 
+                                                                ? 'border-slate-900 text-slate-600 opacity-50 cursor-not-allowed'
+                                                                : 'border-slate-800/80 hover:bg-slate-800/30 text-slate-300'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2.5">
+                                                        <input
+                                                            type="checkbox"
+                                                            disabled={isImproved}
+                                                            checked={isChecked}
+                                                            onChange={() => {
+                                                                if (isChecked) {
+                                                                    setRequestedProperties(prev => prev.filter(id => id !== p.propertyId));
+                                                                } else {
+                                                                    setRequestedProperties(prev => [...prev, p.propertyId]);
+                                                                }
+                                                            }}
+                                                            className="accent-amber-500 rounded cursor-pointer"
+                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`w-3 h-3 rounded-full ${groupColors[catalog?.group] || 'bg-slate-700'}`} />
+                                                            <span>{catalog?.name || p.propertyName}</span>
+                                                            {p.mortgaged && (
+                                                                <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/20 px-1 rounded uppercase font-extrabold scale-90">Mortgaged</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {isImproved && (
+                                                        <span className="text-[9px] text-red-400 font-bold">Has Houses</span>
+                                                    )}
+                                                </label>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
+                            <button
+                                onClick={() => {
+                                    setShowTradeModal(false);
+                                    setTradePartner(null);
+                                }}
+                                className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800/40 hover:bg-slate-700 text-xs font-bold text-slate-300 cursor-pointer transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        if (offeredCash === 0 && requestedCash === 0 && offeredProperties.length === 0 && requestedProperties.length === 0) {
+                                            toast.error('Trade cannot be empty');
+                                            return;
+                                        }
+                                        await proposeTrade(
+                                            tradePartner.playerId,
+                                            offeredProperties,
+                                            requestedProperties,
+                                            offeredCash,
+                                            requestedCash
+                                        );
+                                        setShowTradeModal(false);
+                                        setTradePartner(null);
+                                    } catch (err) {
+                                        console.error(err);
+                                    }
+                                }}
+                                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white shadow-lg cursor-pointer transition-colors"
+                            >
+                                Propose Trade
                             </button>
                         </div>
                     </div>

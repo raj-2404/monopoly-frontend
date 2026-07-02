@@ -1,6 +1,6 @@
 {
-  "startingMoney": 25000,
-  "passStartReward": 2000,
+  "startingMoney": 20000,
+  "passStartReward": 1500,
   "jailBail": 500,
   "clubFee": 100,
   "incomeTaxPercentage": 2,
