@@ -21,21 +21,41 @@ function BoardToken({ username, size = 22 }) {
     const eyeOuter = Math.round(size * 0.32);
     const eyeInner = Math.round(size * 0.18);
     return (
-        <div
-            title={username}
-            style={{
-                width: size,
-                height: size,
-                backgroundColor: tokenHex,
-                borderRadius: '50%',
-                boxShadow: `0 0 8px 2px ${tokenHex}99, 0 0 0 1.5px rgba(0,0,0,0.8)`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                position: 'relative',
-            }}
-        >
+        <>
+            <style>{`
+                @keyframes tokenEnter {
+                    0% {
+                        transform: scale(0.3) translateY(-10px);
+                        opacity: 0;
+                    }
+                    70% {
+                        transform: scale(1.15) translateY(2px);
+                    }
+                    100% {
+                        transform: scale(1) translateY(0);
+                        opacity: 1;
+                    }
+                }
+                .token-anim {
+                    animation: tokenEnter 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+                }
+            `}</style>
+            <div
+                title={username}
+                className="token-anim"
+                style={{
+                    width: size,
+                    height: size,
+                    backgroundColor: tokenHex,
+                    borderRadius: '50%',
+                    boxShadow: `0 0 8px 2px ${tokenHex}99, 0 0 0 1.5px rgba(0,0,0,0.8)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    position: 'relative',
+                }}
+            >
             {/* Eyes */}
             <div style={{ display: 'flex', gap: Math.round(size * 0.08), alignItems: 'center', marginTop: Math.round(size * 0.05) }}>
                 {[0, 1].map(i => (
@@ -59,6 +79,7 @@ function BoardToken({ username, size = 22 }) {
                 ))}
             </div>
         </div>
+        </>
     );
 }
 
@@ -153,6 +174,49 @@ export default function GameBoard() {
     const [requestedProperties, setRequestedProperties] = useState([]);
     const [selectedPlayerForMenu, setSelectedPlayerForMenu] = useState(null);
     const [actionPending, setActionPending] = useState(false);
+
+    // Animated player positions for path step-by-step animation
+    const [animatedPositions, setAnimatedPositions] = useState({});
+
+    // Keep animatedPositions initialized and sync new players
+    useEffect(() => {
+        if (!game?.players) return;
+        setAnimatedPositions(prev => {
+            const next = { ...prev };
+            let changed = false;
+            game.players.forEach(p => {
+                if (next[p.playerId] === undefined) {
+                    next[p.playerId] = p.position;
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
+    }, [game?.players]);
+
+    // Tick transition animation loop for out-of-sync player positions
+    useEffect(() => {
+        if (!game?.players) return;
+
+        const timer = setTimeout(() => {
+            let movedAny = false;
+            setAnimatedPositions(prev => {
+                const next = { ...prev };
+                game.players.forEach(p => {
+                    const target = p.position;
+                    const current = next[p.playerId];
+                    if (current !== undefined && current !== target) {
+                        // Move one step forward along the 36-tile loop
+                        next[p.playerId] = (current + 1) % 36;
+                        movedAny = true;
+                    }
+                });
+                return movedAny ? next : prev;
+            });
+        }, 180); // 180ms per hop is optimal for path-following animation!
+
+        return () => clearTimeout(timer);
+    }, [game?.players, animatedPositions]);
 
     useEffect(() => {
         setActionPending(false);
@@ -255,10 +319,10 @@ export default function GameBoard() {
     );
     // Color mapper for board properties
     const groupColors = {
-        'DARK_BLUE': 'bg-blue-600',
-        'GREEN': 'bg-emerald-600',
-        'RED': 'bg-rose-600',
-        'YELLOW': 'bg-amber-500',
+        'WEST': 'bg-orange-600',
+        'EAST': 'bg-purple-850',
+        'SOUTH': 'bg-green-600',
+        'NORTH': 'bg-[#8eb0c9]',
         'RAIL_ELECTRIC': 'bg-white',
         'AIR_WATER': 'bg-cyan-600',
         'ROAD_BUS': 'bg-slate-500'
@@ -438,11 +502,11 @@ export default function GameBoard() {
 
     // ── Group color system (raw hex for inline styles) ────────────────────
     const groupRawColor = {
-        'DARK_BLUE':    '#2563eb',
-        'GREEN':        '#059669',
-        'RED':          '#e11d48',
-        'YELLOW':       '#d97706',
-        'RAIL_ELECTRIC':'#e2e8f0',
+        'WEST':          '#ea580c',
+        'EAST':          '#581c87',
+        'SOUTH':         '#16a34a',
+        'NORTH':         '#8eb0c9',
+        'RAIL_ELECTRIC': '#e2e8f0',
         'AIR_WATER':    '#0891b2',
         'ROAD_BUS':     '#64748b',
     };
@@ -465,11 +529,11 @@ export default function GameBoard() {
     // ── Glass style per group ─────────────────────────────────────────────
     const getGroupGlassStyle = (group) => {
         const colorMap = {
-            'DARK_BLUE':    'rgba(37,99,235,0.22)',
-            'GREEN':        'rgba(5,150,105,0.22)',
-            'RED':          'rgba(225,29,72,0.22)',
-            'YELLOW':       'rgba(217,119,6,0.22)',
-            'RAIL_ELECTRIC':'rgba(226,232,240,0.14)',
+            'WEST':          'rgba(234,88,12,0.22)',
+            'EAST':          'rgba(88,28,135,0.22)',
+            'SOUTH':         'rgba(22,163,74,0.22)',
+            'NORTH':         'rgba(142,176,201,0.22)',
+            'RAIL_ELECTRIC': 'rgba(226,232,240,0.14)',
             'AIR_WATER':    'rgba(8,145,178,0.22)',
             'ROAD_BUS':     'rgba(100,116,139,0.22)',
         };
@@ -554,9 +618,12 @@ export default function GameBoard() {
         return null;
     };
 
-    // Find players currently on a tile position
+    // Find players currently on a tile position (using animated positions for path step-by-step movement)
     const getPlayersOnTile = (pos) => {
-        return game.players.filter(p => p.position === pos && p.status !== 'BANKRUPT');
+        return game.players.filter(p => {
+            const animPos = animatedPositions[p.playerId] !== undefined ? animatedPositions[p.playerId] : p.position;
+            return animPos === pos && p.status !== 'BANKRUPT';
+        });
     };
 
     return (
@@ -961,11 +1028,11 @@ export default function GameBoard() {
                                         ...gridStyle,
                                         borderRadius: isCorner ? '0px' : '6px',
                                     }}
-                                    className={`relative overflow-hidden select-none cursor-pointer transition-all duration-150
-                                        hover:brightness-125 hover:z-20
+                                    className={`relative select-none cursor-pointer transition-all duration-150
+                                        hover:brightness-125 hover:z-25
                                         ${isCorner
-                                            ? 'bg-[#0d1020] border border-white/10'
-                                            : 'border border-white/[0.07]'
+                                            ? 'bg-[#0d1020] border border-white/10 overflow-hidden z-10'
+                                            : 'border border-white/[0.07] z-10'
                                         }`}
                                     onClick={() => { if (propState) setSelectedProperty(propState); }}
                                 >
@@ -991,7 +1058,7 @@ export default function GameBoard() {
                                                 <div className="absolute inset-0 flex items-center justify-center z-20">
                                                     <div className="flex -space-x-2">
                                                         {playersHere.map(p => (
-                                                            <BoardToken key={p.playerId} username={p.username} size={39} />
+                                                            <BoardToken key={p.playerId} username={p.username} tokenColor={p.tokenColor} size={39} />
                                                         ))}
                                                     </div>
                                                 </div>
@@ -1000,230 +1067,236 @@ export default function GameBoard() {
                                     ) : (
                                         /* ══ NON-CORNER TILES ══ */
                                         <>
-                                            {/* Layer 1 – faint solid color fill (the "color strip behind glass") */}
-                                            <div
-                                                className="absolute inset-0"
-                                                style={{ backgroundColor: accentColor, opacity: 0.38 }}
-                                            />
+                                            {/* Layer 1 – background image or solid color fill */}
+                                            {propState?.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(propState.group.toUpperCase()) ? (
+                                                <img 
+                                                    src={`/images/${propState.group.toLowerCase()}.png`} 
+                                                    className="absolute inset-0 w-full h-full object-cover z-0" 
+                                                    alt="" 
+                                                />
+                                            ) : (
+                                                <div
+                                                    className="absolute inset-0 z-0"
+                                                    style={{ backgroundColor: accentColor, opacity: 0.38 }}
+                                                />
+                                            )}
 
                                             {/* Layer 2 – glass morphism overlay */}
                                             <div
-                                                className="absolute inset-0"
+                                                className="absolute inset-0 z-10"
                                                 style={{
-                                                    background: 'linear-gradient(160deg, rgba(255,255,255,0.07) 0%, rgba(10,12,28,0.58) 100%)',
+                                                    background: 'rgba(10, 12, 28, 0.45)',
                                                     backdropFilter: 'blur(6px)',
                                                     WebkitBackdropFilter: 'blur(6px)',
                                                     border: 'none',
                                                 }}
                                             />
 
-                                            {/* Layer 3 – ownership fill: 20% of card area on OPPOSITE edge from color strip */}
+                                            {/* Layer 3 – ownership fill: 25% of card area on same edge as price/accent strip */}
                                             {ownerColor && (
                                                 <div
-                                                    className="absolute z-[5]"
+                                                    className="absolute z-20"
                                                     style={{
                                                         backgroundColor: ownerColor,
-                                                        opacity: 0.82,
-                                                        // opposite edge from the accent strip, fills 20% of the card
-                                                        ...(side === 'bottom' ? { top: 0,    left: 0, right: 0, height: '20%', borderRadius: '6px 6px 0 0' } : {}),
-                                                        ...(side === 'top'    ? { bottom: 0, left: 0, right: 0, height: '20%', borderRadius: '0 0 6px 6px' } : {}),
-                                                        ...(side === 'left'   ? { right: 0,  top: 0,  bottom: 0, width: '20%', borderRadius: '0 6px 6px 0' } : {}),
-                                                        ...(side === 'right'  ? { left: 0,   top: 0,  bottom: 0, width: '20%', borderRadius: '6px 0 0 6px' } : {}),
+                                                        opacity: 1,
+                                                        // same edge as price (outward edge)
+                                                        ...(side === 'bottom' ? { bottom: 0, left: 0, right: 0, height: '25%', borderRadius: '0 0 6px 6px' } : {}),
+                                                        ...(side === 'top'    ? { top: 0,    left: 0, right: 0, height: '25%', borderRadius: '6px 6px 0 0' } : {}),
+                                                        ...(side === 'left'   ? { left: 0,   top: 0,  bottom: 0, width: '25%', borderRadius: '6px 0 0 6px' } : {}),
+                                                        ...(side === 'right'  ? { right: 0,  top: 0,  bottom: 0, width: '25%', borderRadius: '0 6px 6px 0' } : {}),
                                                     }}
                                                 />
                                             )}
 
                                             {/* ── HORIZONTAL TILES (bottom row pos 1-8, top row pos 19-26) ── */}
                                             {!isVertical && (
-                                                <div className="absolute inset-0 z-10 flex flex-col justify-between p-1">
-                                                    {/* Name at the top for bottom-row, bottom for top-row */}
+                                                <div className="absolute inset-0 z-10 flex flex-col justify-between" style={{ overflow: 'visible' }}>
+                                                    {/* BOTTOM row: price outside (bottom), name+circle inside (top) */}
                                                     {side === 'bottom' && (
                                                         <>
+                                                            {/* Inside face: city name near top (shifted down to clear top circle icon) */}
                                                             <span
-                                                                className="text-white leading-tight w-full text-center"
+                                                                className="text-white w-full text-center px-0.5 pt-6"
                                                                 style={{
                                                                     fontFamily: "'Oswald', sans-serif",
-                                                                    fontSize: 'clamp(7px, 1.1vw, 13px)',
+                                                                    fontSize: 'clamp(6px, 1vw, 11px)',
+                                                                    fontWeight: '700',
                                                                     textShadow: '0 1px 5px rgba(0,0,0,1)',
                                                                     display: '-webkit-box',
                                                                     WebkitLineClamp: 2,
                                                                     WebkitBoxOrient: 'vertical',
                                                                     overflow: 'hidden',
-                                                                    letterSpacing: '0.01em',
-                                                                    fontWeight: '600',
                                                                     lineHeight: 1.1,
                                                                 }}
-                                                            >
-                                                                {tileName}
-                                                            </span>
+                                                            >{tileName}</span>
                                                             {/* dev level */}
                                                             {propState?.developmentLevel > 0 && (
-                                                                <span className="text-center leading-none" style={{ fontSize: '10px' }}>
+                                                                <span className="text-center leading-none" style={{ fontSize: '9px' }}>
                                                                     {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
                                                                 </span>
                                                             )}
+                                                            {/* Inside face: circle icon centered, sitting on top edge (inwards) */}
+                                                            {propState?.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(propState.group.toUpperCase()) && (
+                                                                <div className="absolute left-1/2 -translate-x-1/2 z-30"
+                                                                    style={{ top: '-17px', width: '34px', height: '34px', borderRadius: '50%', border: 'none', backgroundColor: 'rgba(255, 255, 255, 0.8)', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    <img src={`/images/${propState.group.toLowerCase()}.png`} alt="" style={{ width: '90%', height: '90%', objectFit: 'contain' }} />
+                                                                </div>
+                                                            )}
+                                                            {/* Outside face: price at very bottom */}
                                                             {tileMeta && (
                                                                 <span
-                                                                    className="self-center text-white leading-none rounded-sm px-1 py-0.5"
+                                                                    className="self-center text-white leading-none rounded-sm px-1 py-0.5 mb-1.5"
                                                                     style={{
                                                                         fontFamily: "'Oswald', sans-serif",
-                                                                        fontSize: 'clamp(6px, 0.9vw, 11px)',
+                                                                        fontSize: 'clamp(5px, 0.8vw, 10px)',
                                                                         fontWeight: '600',
-                                                                        background: 'rgba(0,0,0,0.60)',
-                                                                        border: `1px solid ${accentColor}66`,
-                                                                        boxShadow: `0 0 6px ${accentColor}55`,
-                                                                        letterSpacing: '0.02em',
+                                                                        background: 'rgba(0,0,0,0.70)',
+                                                                        border: `1px solid ${accentColor}88`,
                                                                         whiteSpace: 'nowrap',
+                                                                        marginTop: 'auto',
                                                                     }}
-                                                                >
-                                                                    {tileMeta}
-                                                                </span>
+                                                                >{tileMeta}</span>
                                                             )}
                                                         </>
                                                     )}
+                                                    {/* TOP row: price outside (top), name+circle inside (bottom) */}
                                                     {side === 'top' && (
                                                         <>
+                                                            {/* Outside face: price at very top */}
                                                             {tileMeta && (
                                                                 <span
-                                                                    className="self-center text-white leading-none rounded-sm px-1 py-0.5"
+                                                                    className="self-center text-white leading-none rounded-sm px-1 py-0.5 mt-1.5"
                                                                     style={{
                                                                         fontFamily: "'Oswald', sans-serif",
-                                                                        fontSize: 'clamp(6px, 0.9vw, 11px)',
+                                                                        fontSize: 'clamp(5px, 0.8vw, 10px)',
                                                                         fontWeight: '600',
-                                                                        background: 'rgba(0,0,0,0.60)',
-                                                                        border: `1px solid ${accentColor}66`,
-                                                                        boxShadow: `0 0 6px ${accentColor}55`,
-                                                                        letterSpacing: '0.02em',
+                                                                        background: 'rgba(0,0,0,0.70)',
+                                                                        border: `1px solid ${accentColor}88`,
                                                                         whiteSpace: 'nowrap',
                                                                     }}
-                                                                >
-                                                                    {tileMeta}
-                                                                </span>
+                                                                >{tileMeta}</span>
                                                             )}
+                                                            {/* dev level */}
                                                             {propState?.developmentLevel > 0 && (
-                                                                <span className="text-center leading-none" style={{ fontSize: '10px' }}>
+                                                                <span className="text-center leading-none" style={{ fontSize: '9px' }}>
                                                                     {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
                                                                 </span>
                                                             )}
+                                                            {/* Inside face: circle icon sitting on bottom edge (inwards) */}
+                                                            {propState?.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(propState.group.toUpperCase()) && (
+                                                                <div className="absolute left-1/2 -translate-x-1/2 z-30"
+                                                                    style={{ bottom: '-17px', width: '34px', height: '34px', borderRadius: '50%', border: 'none', backgroundColor: 'rgba(255, 255, 255, 0.8)', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    <img src={`/images/${propState.group.toLowerCase()}.png`} alt="" style={{ width: '90%', height: '90%', objectFit: 'contain' }} />
+                                                                </div>
+                                                            )}
+                                                            {/* Inside face: city name near bottom (shifted up to clear bottom circle icon) */}
                                                             <span
-                                                                className="text-white leading-tight w-full text-center"
+                                                                className="text-white w-full text-center px-0.5 pb-6"
                                                                 style={{
                                                                     fontFamily: "'Oswald', sans-serif",
-                                                                    fontSize: 'clamp(7px, 1.1vw, 13px)',
-                                                                    fontWeight: '600',
+                                                                    fontSize: 'clamp(6px, 1vw, 11px)',
+                                                                    fontWeight: '700',
                                                                     textShadow: '0 1px 5px rgba(0,0,0,1)',
                                                                     display: '-webkit-box',
                                                                     WebkitLineClamp: 2,
                                                                     WebkitBoxOrient: 'vertical',
                                                                     overflow: 'hidden',
-                                                                    letterSpacing: '0.01em',
                                                                     lineHeight: 1.1,
+                                                                    marginTop: 'auto',
                                                                 }}
-                                                            >
-                                                                {tileName}
-                                                            </span>
+                                                            >{tileName}</span>
                                                         </>
-                                                    )}
-                                                    {/* owner badge */}
-                                                    {propState?.ownerId && (
-                                                        <span
-                                                            className="absolute top-0.5 right-0.5 rounded text-purple-300 font-black border border-purple-500/30 leading-none"
-                                                            style={{ fontSize: '5px', padding: '1px 2px', background: 'rgba(0,0,0,0.7)' }}
-                                                        >
-                                                            {getOwnerName(propState.ownerId)}
-                                                        </span>
                                                     )}
                                                 </div>
                                             )}
 
                                             {/* ── VERTICAL TILES (left col pos 10-17, right col pos 28-35) ── */}
                                             {isVertical && (
-                                                <div className="absolute inset-0 z-10">
-                                                    {/* Name — on the LEFT edge, rotated */}
-                                                    <span
-                                                        className="absolute text-white leading-none tracking-wide"
-                                                        style={{
-                                                            fontFamily: "'Oswald', sans-serif",
-                                                            fontSize: 'clamp(7px, 1vw, 12px)',
-                                                            fontWeight: '600',
-                                                            textShadow: '0 1px 4px rgba(0,0,0,1)',
-                                                            whiteSpace: 'nowrap',
-                                                            overflow: 'hidden',
-                                                            maxWidth: '88%',
-                                                            left: '4px',
-                                                            top: '50%',
-                                                            transform: 'translateY(-50%) rotate(-90deg)',
-                                                            transformOrigin: 'center center',
-                                                            letterSpacing: '0.01em',
-                                                        }}
-                                                    >
-                                                        {tileName}
-                                                    </span>
+                                                <div className="absolute inset-0 z-10" style={{ overflow: 'visible' }}>
+                                                    {/* LEFT col: price on left (outside), name+circle on right (inside) */}
+                                                    {/* RIGHT col: price on right (outside), name+circle on left (inside) */}
 
-                                                    {/* Price pill — on the RIGHT edge */}
+                                                    {/* Price — outside edge, rotated */}
                                                     {tileMeta && (
                                                         <span
                                                             className="absolute text-white leading-none rounded-sm"
                                                             style={{
                                                                 fontFamily: "'Oswald', sans-serif",
-                                                                fontSize: 'clamp(6px, 0.85vw, 10px)',
+                                                                fontSize: 'clamp(5px, 0.8vw, 10px)',
                                                                 fontWeight: '600',
                                                                 padding: '2px 3px',
-                                                                background: 'rgba(0,0,0,0.60)',
-                                                                border: `1px solid ${accentColor}66`,
-                                                                boxShadow: `0 0 6px ${accentColor}55`,
+                                                                background: 'rgba(0,0,0,0.70)',
+                                                                border: `1px solid ${accentColor}88`,
                                                                 whiteSpace: 'nowrap',
-                                                                right: '4px',
                                                                 top: '50%',
-                                                                transform: 'translateY(-50%) rotate(90deg)',
-                                                                transformOrigin: 'center center',
+                                                                // left col → price at left edge; right col → price at right edge
+                                                                ...(side === 'left'
+                                                                    ? { left: '3px', transform: 'translateY(-50%) rotate(-90deg)', transformOrigin: 'center center' }
+                                                                    : { right: '3px', transform: 'translateY(-50%) rotate(90deg)', transformOrigin: 'center center' }
+                                                                ),
+                                                            }}
+                                                        >{tileMeta}</span>
+                                                    )}
+
+                                                    {/* City name — inside edge, rotated */}
+                                                    <span
+                                                        className="absolute text-white leading-none"
+                                                        style={{
+                                                            fontFamily: "'Oswald', sans-serif",
+                                                            fontSize: 'clamp(6px, 0.9vw, 11px)',
+                                                            fontWeight: '700',
+                                                            textShadow: '0 1px 4px rgba(0,0,0,1)',
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            maxWidth: '80%',
+                                                            top: '50%',
+                                                            // left col → name at right edge; right col → name at left edge
+                                                            ...(side === 'left'
+                                                                ? { right: '18px', transform: 'translateY(-50%) rotate(90deg)', transformOrigin: 'center center' }
+                                                                : { left: '18px', transform: 'translateY(-50%) rotate(-90deg)', transformOrigin: 'center center' }
+                                                            ),
+                                                        }}
+                                                    >{tileName}</span>
+
+                                                    {/* Circle icon — on the inside edge, centered vertically */}
+                                                    {propState?.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(propState.group.toUpperCase()) && (
+                                                        <div
+                                                            className="absolute z-30"
+                                                            style={{
+                                                                top: '50%',
+                                                                transform: 'translateY(-50%)',
+                                                                width: '32px', height: '32px',
+                                                                borderRadius: '50%',
+                                                                border: 'none',
+                                                                backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                                                                overflow: 'hidden',
+                                                                boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                // left col → circle on right (inside); right col → circle on left (inside)
+                                                                ...(side === 'left' ? { right: '-16px' } : { left: '-16px' }),
                                                             }}
                                                         >
-                                                            {tileMeta}
-                                                        </span>
+                                                            <img src={`/images/${propState.group.toLowerCase()}.png`} alt="" style={{ width: '90%', height: '90%', objectFit: 'contain' }} />
+                                                        </div>
                                                     )}
 
                                                     {/* Dev level — centered */}
                                                     {propState?.developmentLevel > 0 && (
-                                                        <span
-                                                            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                                                            style={{ fontSize: '10px', lineHeight: 1 }}
-                                                        >
+                                                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ fontSize: '9px', lineHeight: 1 }}>
                                                             {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
-                                                        </span>
-                                                    )}
-
-                                                    {/* Owner badge — top center */}
-                                                    {propState?.ownerId && (
-                                                        <span
-                                                            className="absolute top-0.5 left-1/2 -translate-x-1/2 rounded text-purple-300 font-black border border-purple-500/30 leading-none whitespace-nowrap"
-                                                            style={{ fontSize: '5px', padding: '1px 2px', background: 'rgba(0,0,0,0.7)', fontFamily: "'Oswald', sans-serif" }}
-                                                        >
-                                                            {getOwnerName(propState.ownerId)}
                                                         </span>
                                                     )}
                                                 </div>
                                             )}
 
-                                            {/* Glowing edge strip — the group color accent line */}
-                                            <div
-                                                className="absolute z-20"
-                                                style={{
-                                                    backgroundColor: accentColor,
-                                                    boxShadow: `0 0 10px 2px ${accentColor}88`,
-                                                    ...(side === 'bottom' ? { bottom: 0, left: 0, right: 0, height: '6px' } : {}),
-                                                    ...(side === 'top'    ? { top: 0,    left: 0, right: 0, height: '6px' } : {}),
-                                                    ...(side === 'left'   ? { left: 0,   top: 0,  bottom: 0, width: '6px' } : {}),
-                                                    ...(side === 'right'  ? { right: 0,  top: 0,  bottom: 0, width: '6px' } : {}),
-                                                }}
-                                            />
+
 
                                             {/* Player tokens */}
                                             {playersHere.length > 0 && (
                                                 <div className="absolute inset-0 flex items-center justify-center z-30">
                                                     <div className="flex -space-x-1.5">
                                                         {playersHere.map(p => (
-                                                            <BoardToken key={p.playerId} username={p.username} size={30} />
+                                                            <BoardToken key={p.playerId} username={p.username} tokenColor={p.tokenColor} size={30} />
                                                         ))}
                                                     </div>
                                                 </div>
@@ -1286,76 +1359,113 @@ export default function GameBoard() {
 
                                         {/* Contextual Options */}
                                         <div className="w-full space-y-4">
-                                            {isMyTurn && !isRecovering && (
+                                            {isMyTurn && (
                                                 <div className="flex flex-col gap-2.5">
-                                                    {/* Dice Roll */}
-                                                    {!hasRolled && !isJailed && (
-                                                        <button 
-                                                            onClick={handleRoll}
-                                                            disabled={actionPending}
-                                                            className={`w-full flex items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500 glow-primary cursor-pointer transition-transform duration-200 active:scale-95 shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                        >
-                                                            <Dice5 className="h-5 w-5" />
-                                                            {actionPending ? 'Rolling...' : 'Roll Dice'}
-                                                        </button>
-                                                    )}
-
-                                                    {/* Bail Options */}
-                                                    {isJailed && (
-                                                        <div className="flex gap-2">
-                                                            <button 
-                                                                onClick={handlePayBail}
-                                                                disabled={actionPending}
-                                                                className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 py-2.5 text-xs font-bold text-white hover:bg-amber-500 transition-all cursor-pointer shadow-sm ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                            >
-                                                                <DollarSign className="h-4 w-4" />
-                                                                Pay ₹500 Bail
-                                                            </button>
-                                                            <button 
-                                                                onClick={handleEndTurn}
-                                                                disabled={actionPending}
-                                                                className={`flex-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-all cursor-pointer shadow-xs ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                            >
-                                                                Skip & Stay Jailed
-                                                            </button>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Purchase property decisions */}
-                                                    {canBuyCurrentProperty && (
-                                                        <div className="flex flex-col gap-2 bg-slate-900/85 p-3 rounded-xl border border-slate-850">
-                                                            <p className="text-xs text-slate-200 font-bold m-0">
-                                                                {currentProperty?.name || currentProperty?.propertyName || 'Property'} is unowned. Purchase?
-                                                            </p>
-                                                            <div className="flex gap-2 mt-1">
-                                                                <button 
-                                                                    onClick={() => handleBuy(currentProperty?.propertyId)}
-                                                                    disabled={actionPending}
-                                                                    className={`flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 glow-success cursor-pointer shadow-sm ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                                >
-                                                                    Buy Estate
-                                                                </button>
-                                                                <button 
-                                                                    onClick={handleSkip}
-                                                                    disabled={actionPending}
-                                                                    className={`flex-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-700 cursor-pointer shadow-xs ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                                >
-                                                                    Skip & End Turn
-                                                                </button>
+                                                    {/* Recovery Mode Actions */}
+                                                    {isRecovering && (
+                                                        <div className="flex flex-col gap-2 bg-slate-900/50 p-3.5 rounded-xl border border-red-500/20">
+                                                            <div className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase mb-1">
+                                                                <ShieldAlert className="h-4 w-4" />
+                                                                Negative Balance: ₹{me.balance}
                                                             </div>
+                                                            <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
+                                                                Sell houses/hotels or mortgage properties from your assets list to get out of debt.
+                                                            </p>
+                                                            {me.balance < 0 ? (
+                                                                <button 
+                                                                    onClick={handleEndTurn}
+                                                                    disabled={actionPending}
+                                                                    className={`w-full flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-500 py-3 text-sm font-bold text-white transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                >
+                                                                    <ShieldAlert className="h-4 w-4" />
+                                                                    {actionPending ? 'Processing...' : 'Declare Bankruptcy'}
+                                                                </button>
+                                                            ) : (
+                                                                <button 
+                                                                    onClick={handleEndTurn}
+                                                                    disabled={actionPending}
+                                                                    className={`w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-3 text-sm font-bold text-white transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                >
+                                                                    <UserCheck className="h-4 w-4" />
+                                                                    {actionPending ? 'Ending Turn...' : 'End Turn & Exit Recovery'}
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     )}
 
-                                                    {/* End Turn option */}
-                                                    {hasRolled && pendingAction === 'NONE' && (
-                                                        <button 
-                                                            onClick={handleEndTurn}
-                                                            disabled={actionPending}
-                                                            className={`w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-500 transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                        >
-                                                            <UserCheck className="h-5 w-5" />
-                                                            {actionPending ? 'Ending Turn...' : 'End Turn'}
-                                                        </button>
+                                                    {/* Standard Turn Actions */}
+                                                    {!isRecovering && (
+                                                        <>
+                                                            {/* Dice Roll */}
+                                                            {!hasRolled && !isJailed && (
+                                                                <button 
+                                                                    onClick={handleRoll}
+                                                                    disabled={actionPending}
+                                                                    className={`w-full flex items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500 glow-primary cursor-pointer transition-transform duration-200 active:scale-95 shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                >
+                                                                    <Dice5 className="h-5 w-5" />
+                                                                    {actionPending ? 'Rolling...' : 'Roll Dice'}
+                                                                </button>
+                                                            )}
+
+                                                            {/* Bail Options */}
+                                                            {isJailed && (
+                                                                <div className="flex gap-2">
+                                                                    <button 
+                                                                        onClick={handlePayBail}
+                                                                        disabled={actionPending}
+                                                                        className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 py-2.5 text-xs font-bold text-white hover:bg-amber-500 transition-all cursor-pointer shadow-sm ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                    >
+                                                                        <DollarSign className="h-4 w-4" />
+                                                                        Pay ₹500 Bail
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={handleEndTurn}
+                                                                        disabled={actionPending}
+                                                                        className={`flex-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-all cursor-pointer shadow-xs ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                    >
+                                                                        Skip & Stay Jailed
+                                                                    </button>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Purchase property decisions */}
+                                                            {canBuyCurrentProperty && (
+                                                                <div className="flex flex-col gap-2 bg-slate-900/85 p-3 rounded-xl border border-slate-850">
+                                                                    <p className="text-xs text-slate-200 font-bold m-0">
+                                                                        {currentProperty?.name || currentProperty?.propertyName || 'Property'} is unowned. Purchase?
+                                                                    </p>
+                                                                    <div className="flex gap-2 mt-1">
+                                                                        <button 
+                                                                            onClick={() => handleBuy(currentProperty?.propertyId)}
+                                                                            disabled={actionPending}
+                                                                            className={`flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 glow-success cursor-pointer shadow-sm ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                        >
+                                                                            Buy Estate
+                                                                        </button>
+                                                                        <button 
+                                                                            onClick={handleSkip}
+                                                                            disabled={actionPending}
+                                                                            className={`flex-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-bold text-slate-200 hover:bg-slate-700 cursor-pointer shadow-xs ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                        >
+                                                                            Skip & End Turn
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* End Turn option */}
+                                                            {hasRolled && pendingAction === 'NONE' && (
+                                                                <button 
+                                                                    onClick={handleEndTurn}
+                                                                    disabled={actionPending}
+                                                                    className={`w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-500 transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                >
+                                                                    <UserCheck className="h-5 w-5" />
+                                                                    {actionPending ? 'Ending Turn...' : 'End Turn'}
+                                                                </button>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
                                             )}
@@ -1433,25 +1543,56 @@ export default function GameBoard() {
                         className="glass-premium rounded-2xl overflow-hidden w-full max-w-sm text-left shadow-2xl animate-scale-up"
                         onClick={e => e.stopPropagation()}
                     >
-                        {/* Header Color band with name and price */}
-                        <div className={`p-4 flex justify-between items-center ${groupColors[selectedProperty.group] || 'bg-slate-700'} text-slate-950 font-black uppercase tracking-tight`}>
-                            <h3 className="text-lg font-black uppercase m-0 leading-none">
-                                {selectedProperty.propertyName || selectedProperty.name}
-                            </h3>
-                            <span className="text-xs font-black bg-slate-950/20 px-2 py-0.5 rounded">
-                                {formatMoney(selectedProperty.price)}
-                            </span>
+                        {/* Beautiful Visual City Card (Exact Copy of Screenshot Design) */}
+                        <div className="relative w-full h-56 overflow-visible flex flex-col justify-between p-4 pb-0">
+                            {/* Card Body */}
+                            <div className="relative w-full h-full rounded-2xl overflow-hidden border border-white/10 flex flex-col items-center justify-between p-4 shadow-xl">
+                                {/* 1. Card Background PNG (Group directional PNG) */}
+                                {['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(selectedProperty.group) ? (
+                                    <img 
+                                        src={`/images/${selectedProperty.group.toLowerCase()}.png`} 
+                                        className="absolute inset-0 w-full h-full object-cover z-0" 
+                                        alt={selectedProperty.group} 
+                                    />
+                                ) : (
+                                    <div 
+                                        className={`absolute inset-0 z-0 ${groupColors[selectedProperty.group] || 'bg-slate-700'}`}
+                                    />
+                                )}
+                                
+                                {/* 2. Glass Effect Overlay */}
+                                <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-md z-10" />
+                                
+                                {/* 3. Top Price Badge */}
+                                <div className="relative z-20 bg-slate-900/60 border border-white/10 px-3.5 py-1 rounded-md text-white font-semibold text-xs tracking-wider">
+                                    {formatMoney(selectedProperty.price)}
+                                </div>
+                                
+                                {/* 4. Card Title */}
+                                <div className="relative z-20 mb-8 text-center">
+                                    <h3 className="text-white text-2xl font-bold tracking-wide select-none" style={{ fontFamily: "'Oswald', sans-serif" }}>
+                                        {selectedProperty.propertyName || selectedProperty.name}
+                                    </h3>
+                                </div>
+                            </div>
+
+                            {/* 5. Edge Circular Flag/Badge */}
+                            {selectedProperty.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(selectedProperty.group.toUpperCase()) && (
+                                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-full shadow-lg z-30 overflow-hidden flex items-center justify-center" style={{ backgroundColor: 'rgba(255, 255, 255, 0.8)', width: '100px', height: '100px' }}>
+                                    <img 
+                                        src={getPropertyImagePath(selectedProperty.propertyName || selectedProperty.name, selectedProperty.type)} 
+                                        className="w-full h-full object-cover" 
+                                        onError={e => { e.target.src = 'https://api.dicebear.com/7.x/pixel-art/svg?seed=' + (selectedProperty.propertyName || selectedProperty.name); }}
+                                        alt="Property Icon" 
+                                    />
+                                </div>
+                            )}
                         </div>
 
-                        {/* Glass panel with emoji */}
-                        <div className="w-full h-24 flex flex-col items-center justify-center gap-1.5 border-b border-slate-800/60"
-                            style={{ background: getGroupGlassStyle(selectedProperty.group) }}
-                        >
-                            <span className="text-4xl leading-none">{getTileEmoji({type: selectedProperty.type}, selectedProperty.propertyName || selectedProperty.name)}</span>
-                            <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest">
-                                {selectedProperty.propertyName || selectedProperty.name}
-                            </span>
-                        </div>
+                        {/* Card spacing for bottom circular badge overflow */}
+                        {selectedProperty.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(selectedProperty.group.toUpperCase()) && (
+                            <div className="h-10" />
+                        )}
 
                         <div className="p-6">
                             {/* Estate Details */}
@@ -1637,42 +1778,7 @@ export default function GameBoard() {
                 </div>
             )}
 
-            {/* 5. Asset Liquidation Mode (Recovery Overlay Modal) */}
-            {isRecovering && (
-                <div className="fixed inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md z-40 p-4">
-                    <div className="glass-premium border border-yellow-500/30 rounded-3xl p-8 max-w-md w-full text-center glow-primary">
-                        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-500/10 text-yellow-400 mx-auto border border-yellow-500/30">
-                            <ShieldAlert className="h-8 w-8" />
-                        </div>
-                        <h2 className="text-2xl font-extrabold text-white">Asset Liquidation</h2>
-                        <p className="text-slate-400 text-sm mt-2">
-                            Your balance is currently <span className="text-red-400 font-bold">₹{me.balance}</span>. 
-                            You must sell houses/hotels or mortgage properties to recover a positive balance before you can continue your turn.
-                        </p>
-
-                        <div className="mt-6 space-y-3">
-                            <button 
-                                onClick={() => setActiveTab('assets')}
-                                className="w-full rounded-lg bg-yellow-500 px-4 py-3 text-xs font-bold text-black hover:bg-yellow-400 transition-colors cursor-pointer"
-                            >
-                                Sell Assets / Mortgage Properties
-                            </button>
-                            
-                            <p className="text-[10px] text-slate-500">
-                                If you have no houses to sell and no properties left to mortgage, you can end your turn to declare bankruptcy.
-                            </p>
-
-                            <button 
-                                onClick={handleEndTurn}
-                                disabled={actionPending}
-                                className={`w-full rounded-lg border border-red-500/30 bg-red-950/15 py-3 text-xs font-bold text-red-400 hover:bg-red-500 hover:text-white transition-all cursor-pointer ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                                Declare Bankruptcy
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* 5. Asset Liquidation Mode (Recovery Overlay Modal) - Disabled per user request to allow trading and board access */}
 
             {/* 6. Trade Proposal Modal */}
             {showTradeModal && tradePartner && (
