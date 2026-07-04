@@ -312,7 +312,7 @@ export const GameProvider = ({ children }) => {
                 setGame(prev => {
                     if (!prev) return null;
                     const props = prev.properties.map(p => {
-                        if (p.ownerId === payload.playerId) {
+                        if (p.ownerId && String(p.ownerId).toLowerCase() === String(payload.playerId).toLowerCase()) {
                             return { ...p, ownerId: null, developmentLevel: 0, mortgaged: false };
                         }
                         return p;
@@ -456,7 +456,11 @@ export const GameProvider = ({ children }) => {
             if (!prev) return null;
             const updated = prev.properties.map(p => {
                 if (p.propertyId === propertyId) {
-                    return { ...p, ...fields };
+                    const cleanFields = { ...fields };
+                    if (cleanFields.ownerId !== undefined && cleanFields.ownerId !== null) {
+                        cleanFields.ownerId = String(cleanFields.ownerId).toLowerCase();
+                    }
+                    return { ...p, ...cleanFields };
                 }
                 return p;
             });
@@ -602,6 +606,12 @@ export const GameProvider = ({ children }) => {
                     ...p,
                     playerId: String(p.playerId).toLowerCase(),
                     position: p.boardPosition !== undefined ? p.boardPosition : p.position
+                }));
+            }
+            if (state && state.properties) {
+                state.properties = state.properties.map(p => ({
+                    ...p,
+                    ownerId: p.ownerId ? String(p.ownerId).toLowerCase() : null
                 }));
             }
             setGame(state);
