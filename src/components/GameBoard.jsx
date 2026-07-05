@@ -63,66 +63,81 @@ function BoardToken({ username, tokenColor, size = 22 }) {
     );
 }
 
-// ── Dot positions for each dice face ─────────────────────────────────────────
-// Each entry is an array of [cx, cy] percentage positions within the die face
-const DICE_DOTS = {
-    1: [[50, 50]],
-    2: [[28, 28], [72, 72]],
-    3: [[28, 28], [50, 50], [72, 72]],
-    4: [[28, 28], [72, 28], [28, 72], [72, 72]],
-    5: [[28, 28], [72, 28], [50, 50], [28, 72], [72, 72]],
-    6: [[28, 25], [72, 25], [28, 50], [72, 50], [28, 75], [72, 75]],
+// ── 3D Cube Dice Face component ─────────────────────────────────────────────
+const getRotation = (val) => {
+    switch (val) {
+        case 1: return 'rotateX(90deg) rotateY(0deg) rotateZ(0deg)';
+        case 2: return 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)';
+        case 3: return 'rotateX(90deg) rotateY(-90deg) rotateZ(0deg)';
+        case 4: return 'rotateX(90deg) rotateY(90deg) rotateZ(0deg)';
+        case 5: return 'rotateX(180deg) rotateY(0deg) rotateZ(0deg)';
+        case 6: return 'rotateX(-90deg) rotateY(0deg) rotateZ(0deg)';
+        default: return 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)';
+    }
 };
 
 function DiceFace({ value, isDouble }) {
-    const dots = DICE_DOTS[value] || [];
-    const size = 52;
+    const [rolling, setRolling] = useState(false);
+
+    useEffect(() => {
+        if (!value) return;
+        setRolling(true);
+        const timer = setTimeout(() => setRolling(false), 600);
+        return () => clearTimeout(timer);
+    }, [value]);
+
+    const transformStyle = getRotation(value);
+
     return (
-        <svg
-            width={size}
-            height={size}
-            viewBox="0 0 100 100"
-            xmlns="http://www.w3.org/2000/svg"
-            style={{
-                filter: isDouble
-                    ? 'drop-shadow(0 0 10px rgba(250,204,21,0.8))'
-                    : 'drop-shadow(0 0 8px rgba(168,85,247,0.5))',
-                borderRadius: '18px',
-            }}
-        >
-            {/* Dice body */}
-            <rect
-                x="2" y="2" width="96" height="96" rx="18" ry="18"
-                fill="url(#diceGrad)"
-                stroke={isDouble ? 'rgba(250,204,21,0.7)' : 'rgba(168,85,247,0.5)'}
-                strokeWidth="2.5"
-            />
-            {/* Gradient fill */}
-            <defs>
-                <linearGradient id="diceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#1e1b4b" />
-                    <stop offset="100%" stopColor="#0f0a23" />
-                </linearGradient>
-                {/* Inner gloss */}
-                <radialGradient id="diceGloss" cx="30%" cy="25%" r="50%">
-                    <stop offset="0%" stopColor="rgba(255,255,255,0.12)" />
-                    <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-                </radialGradient>
-            </defs>
-            {/* Gloss layer */}
-            <rect x="2" y="2" width="96" height="96" rx="18" ry="18" fill="url(#diceGloss)" />
-            {/* Dots */}
-            {dots.map(([cx, cy], i) => (
-                <circle
-                    key={i}
-                    cx={cx}
-                    cy={cy}
-                    r="9"
-                    fill={isDouble ? '#fde047' : '#a855f7'}
-                    style={{ filter: `drop-shadow(0 0 3px ${isDouble ? '#fde047' : '#a855f7'})` }}
-                />
-            ))}
-        </svg>
+        <div data-testid="dice" data-value={value} className={`z8cEagq4 ${isDouble ? 'dice-double' : ''}`}>
+            <div className="k2l1CwEs">
+                <div className={`Zbc4gzb- ${rolling ? 'dice-rolling' : ''}`} style={{ transform: transformStyle }}>
+                    {/* Side 1 */}
+                    <div data-side="1" className="y8Q-UqoT">
+                        <div className="BGpK5gvF"></div>
+                    </div>
+                    {/* Side 2 */}
+                    <div data-side="2" className="y8Q-UqoT">
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                    </div>
+                    {/* Side 3 */}
+                    <div data-side="3" className="y8Q-UqoT">
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                    </div>
+                    {/* Side 4 */}
+                    <div data-side="4" className="y8Q-UqoT">
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                    </div>
+                    {/* Side 5 */}
+                    <div data-side="5" className="y8Q-UqoT">
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                    </div>
+                    {/* Side 6 */}
+                    <div data-side="6" className="y8Q-UqoT">
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                        <div className="BGpK5gvF"></div>
+                    </div>
+                    {/* Corner / Overlay highlights */}
+                    <div className="y8Q-UqoT Ecp7qJ-I RciwbKqU"></div>
+                    <div className="y8Q-UqoT Ecp7qJ-I UJiU71gT"></div>
+                    <div className="y8Q-UqoT Ecp7qJ-I W9moyQfa"></div>
+                </div>
+            </div>
+        </div>
     );
 }
 
@@ -229,11 +244,11 @@ export default function GameBoard() {
         }
     }, [game]);
 
-    const isColorGroupImproved = (group) => {
-        if (!group) return false;
+    const isColorGroupImproved = (group, ownerId) => {
+        if (!group || !ownerId) return false;
         const groupProperties = game.properties.filter(p => {
             const cat = propertyCatalogById[p.propertyId];
-            return cat && cat.group === group;
+            return cat && cat.group === group && p.ownerId === ownerId;
         });
         return groupProperties.some(p => p.developmentLevel > 0);
     };
@@ -1160,16 +1175,11 @@ export default function GameBoard() {
                                                                     lineHeight: 1.1,
                                                                 }}
                                                             >{tileName}</span>
-                                                            {/* dev level */}
-                                                            {propState?.developmentLevel > 0 && (
-                                                                <span className="text-center leading-none" style={{ fontSize: '9px' }}>
-                                                                    {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
-                                                                </span>
-                                                            )}
+
                                                             {/* Inside face: circle icon centered, sitting on top edge (inwards) */}
                                                             {propState?.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(propState.group.toUpperCase()) && (
                                                                 <div className="absolute left-1/2 -translate-x-1/2 z-30"
-                                                                    style={{ top: '-17px', width: '34px', height: '34px', borderRadius: '50%', border: 'none', backgroundColor: getGroupCircleBg(propState.group), overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    style={{ top: '-17px', width: '34px', height: '34px', borderRadius: '8px', border: 'none', backgroundColor: getGroupCircleBg(propState.group), overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                                     <img src={`/images/${propState.group.toLowerCase()}.png`} alt="" style={{ width: '90%', height: '90%', objectFit: 'contain' }} />
                                                                 </div>
                                                             )}
@@ -1207,16 +1217,11 @@ export default function GameBoard() {
                                                                     }}
                                                                 >{tileMeta}</span>
                                                             )}
-                                                            {/* dev level */}
-                                                            {propState?.developmentLevel > 0 && (
-                                                                <span className="text-center leading-none" style={{ fontSize: '9px' }}>
-                                                                    {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
-                                                                </span>
-                                                            )}
+
                                                             {/* Inside face: circle icon sitting on bottom edge (inwards) */}
                                                             {propState?.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(propState.group.toUpperCase()) && (
                                                                 <div className="absolute left-1/2 -translate-x-1/2 z-30"
-                                                                    style={{ bottom: '-17px', width: '34px', height: '34px', borderRadius: '50%', border: 'none', backgroundColor: getGroupCircleBg(propState.group), overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                    style={{ bottom: '-17px', width: '34px', height: '34px', borderRadius: '8px', border: 'none', backgroundColor: getGroupCircleBg(propState.group), overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                                     <img src={`/images/${propState.group.toLowerCase()}.png`} alt="" style={{ width: '90%', height: '90%', objectFit: 'contain' }} />
                                                                 </div>
                                                             )}
@@ -1296,8 +1301,7 @@ export default function GameBoard() {
                                                             style={{
                                                                 top: '50%',
                                                                 transform: 'translateY(-50%)',
-                                                                width: '32px', height: '32px',
-                                                                borderRadius: '50%',
+                                                                width: '32px', height: '32px', borderRadius: '8px',
                                                                  border: 'none',
                                                                  backgroundColor: getGroupCircleBg(propState.group),
                                                                  overflow: 'hidden',
@@ -1313,16 +1317,22 @@ export default function GameBoard() {
 
                                                     {/* Dev level — centered */}
                                                     {propState?.developmentLevel > 0 && (
-                                                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ fontSize: '9px', lineHeight: 1 }}>
-                                                            {propState.developmentLevel === 4 ? '🏨' : '🏠'.repeat(propState.developmentLevel)}
-                                                        </span>
-                                                    )}
+                                                         <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-black ${propState.developmentLevel === 4 ? 'text-white font-bold uppercase tracking-wider' : 'text-amber-400'}`} style={{ fontSize: propState.developmentLevel === 4 ? '8px' : '9px', lineHeight: 1 }}>
+                                                             {propState.developmentLevel === 4 ? 'Hotel' : `H*${propState.developmentLevel}`}
+                                                         </span>
+                                                     )}
                                                 </div>
                                             )}
 
 
 
                                             
+                                            {/* Dev level — centered for all non-corner tiles (z-30 to draw over ownership overlay) */}
+                                            {propState?.developmentLevel > 0 && (
+                                                 <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 font-black ${propState.developmentLevel === 4 ? 'text-white font-bold uppercase tracking-wider' : 'text-amber-400'}`} style={{ fontSize: propState.developmentLevel === 4 ? '8px' : '9px', lineHeight: 1 }}>
+                                                     {propState.developmentLevel === 4 ? 'Hotel' : `H*${propState.developmentLevel}`}
+                                                 </span>
+                                             )}
                                         </>
                                     )}
                                 </div>
@@ -1355,7 +1365,7 @@ export default function GameBoard() {
                                 <button 
                                     onClick={() => setActiveTab('logs')}
                                     className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                                        activeTab === 'logs' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                            activeTab === 'logs' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
                                     }`}
                                 >
                                     Game Logs
@@ -1368,8 +1378,8 @@ export default function GameBoard() {
                                     <div className="h-full flex flex-col justify-center items-center gap-4 text-center">
                                         {/* Render Dice Results */}
                                         {dice && (
-                                            <div className="flex flex-col items-center animate-roll">
-                                                <div className="flex gap-4 items-center">
+                                            <div className="flex flex-col items-center">
+                                                <div className="BNqMSbLU" aria-label="dices" role="button" aria-disabled="true" aria-busy="false">
                                                     <DiceFace value={dice.diceOne} isDouble={dice.isDouble} />
                                                     <DiceFace value={dice.diceTwo} isDouble={dice.isDouble} />
                                                 </div>
@@ -1406,7 +1416,7 @@ export default function GameBoard() {
                                                                 <button 
                                                                     onClick={handleEndTurn}
                                                                     disabled={actionPending}
-                                                                    className={`w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-3 text-sm font-bold text-white transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                    className={`w-48 mx-auto flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-3 text-sm font-bold text-white transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                                 >
                                                                     <UserCheck className="h-4 w-4" />
                                                                     {actionPending ? 'Ending Turn...' : 'End Turn & Exit Recovery'}
@@ -1423,7 +1433,7 @@ export default function GameBoard() {
                                                                 <button 
                                                                     onClick={handleRoll}
                                                                     disabled={actionPending}
-                                                                    className={`w-full flex items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500 glow-primary cursor-pointer transition-transform duration-200 active:scale-95 shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                    className={`w-48 mx-auto flex items-center justify-center gap-2 rounded-xl bg-purple-600 py-3 text-sm font-bold text-white hover:bg-purple-500 glow-primary cursor-pointer transition-transform duration-200 active:scale-95 shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                                 >
                                                                     <Dice5 className="h-5 w-5" />
                                                                     {actionPending ? 'Rolling...' : 'Roll Dice'}
@@ -1481,7 +1491,7 @@ export default function GameBoard() {
                                                                 <button 
                                                                     onClick={handleEndTurn}
                                                                     disabled={actionPending}
-                                                                    className={`w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-500 transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                    className={`w-48 mx-auto flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-500 transition-colors cursor-pointer shadow-md ${actionPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                                 >
                                                                     <UserCheck className="h-5 w-5" />
                                                                     {actionPending ? 'Ending Turn...' : 'End Turn'}
@@ -1645,7 +1655,7 @@ export default function GameBoard() {
 
                             {/* 5. Edge Circular Flag/Badge */}
                             {selectedProperty.group && ['WEST', 'EAST', 'SOUTH', 'NORTH'].includes(selectedProperty.group.toUpperCase()) && (
-                                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-full shadow-lg z-30 overflow-hidden flex items-center justify-center" style={{ backgroundColor: getGroupCircleBg(selectedProperty.group), width: '100px', height: '100px' }}>
+                                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 rounded-2xl shadow-lg z-30 overflow-hidden flex items-center justify-center" style={{ backgroundColor: getGroupCircleBg(selectedProperty.group), width: '100px', height: '100px' }}>
                                     <img 
                                         src={getPropertyImagePath(selectedProperty.propertyName || selectedProperty.name, selectedProperty.type)} 
                                         className="w-full h-full object-cover" 
@@ -1942,7 +1952,7 @@ export default function GameBoard() {
                                     ) : (
                                         game.properties.filter(p => p.ownerId === me.playerId).map(p => {
                                             const catalog = propertyCatalogById[p.propertyId];
-                                            const isImproved = isColorGroupImproved(catalog?.group);
+                                            const isImproved = isColorGroupImproved(catalog?.group, me.playerId);
                                             const isChecked = offeredProperties.includes(p.propertyId);
 
                                             return (
@@ -1978,8 +1988,11 @@ export default function GameBoard() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    {isImproved && (
+                                                    {p.developmentLevel > 0 && (
                                                         <span className="text-[9px] text-red-400 font-bold">Has Houses</span>
+                                                    )}
+                                                    {p.developmentLevel === 0 && isImproved && (
+                                                        <span className="text-[9px] text-red-400/80 font-medium">Group Improved</span>
                                                     )}
                                                 </label>
                                             );
@@ -1997,7 +2010,7 @@ export default function GameBoard() {
                                     ) : (
                                         game.properties.filter(p => p.ownerId === tradePartner.playerId).map(p => {
                                             const catalog = propertyCatalogById[p.propertyId];
-                                            const isImproved = isColorGroupImproved(catalog?.group);
+                                            const isImproved = isColorGroupImproved(catalog?.group, tradePartner.playerId);
                                             const isChecked = requestedProperties.includes(p.propertyId);
 
                                             return (
@@ -2033,8 +2046,11 @@ export default function GameBoard() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    {isImproved && (
+                                                    {p.developmentLevel > 0 && (
                                                         <span className="text-[9px] text-red-400 font-bold">Has Houses</span>
+                                                    )}
+                                                    {p.developmentLevel === 0 && isImproved && (
+                                                        <span className="text-[9px] text-red-400/80 font-medium">Group Improved</span>
                                                     )}
                                                 </label>
                                             );

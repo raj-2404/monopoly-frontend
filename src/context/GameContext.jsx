@@ -45,6 +45,7 @@ export const GameProvider = ({ children }) => {
     const gameSubscriptionRef = useRef(null);
     const gameRef = useRef(null);
     const roomRef = useRef(null);
+    const processedGameVersionRef = useRef(-1);
 
     useEffect(() => {
         gameRef.current = game;
@@ -175,8 +176,19 @@ export const GameProvider = ({ children }) => {
 
     // Handle WebSocket Gameplay Events
     const handleGameEvent = (event) => {
-        const { eventType, payload } = event;
-        console.log('WebSocket event:', eventType, payload);
+        const { eventType, payload, version } = event;
+        console.log('WebSocket event:', eventType, payload, 'version:', version);
+
+        if (version !== undefined && version !== null) {
+            const parsedVersion = Number(version);
+            if (!isNaN(parsedVersion)) {
+                if (parsedVersion < processedGameVersionRef.current) {
+                    console.log(`[GameContext] Ignoring stale WS event ${eventType} (version ${parsedVersion} < current local ${processedGameVersionRef.current})`);
+                    return;
+                }
+                processedGameVersionRef.current = parsedVersion;
+            }
+        }
 
         switch (eventType) {
             case 'ERROR':
@@ -221,8 +233,15 @@ export const GameProvider = ({ children }) => {
                 
                 // Detect passing START (to position < from position, or exactly 0)
                 if (oldPosition !== undefined && (payload.to < oldPosition || payload.to === 0)) {
-                    playSound('pass_start.mp3');
+                    setTimeout(() => {
+                        playSound('pass_start.mp3');
+                    }, 300);
                     addLog(`🎁 ${getPlayerName(payload.playerId)} passed START and collected ₹${(gameRules?.passStartReward ?? 1500).toLocaleString()}!`);
+                }
+
+                // Play community_chance sound when landing on chance or community chest
+                if (tile && (tile.type === 'CHANCE' || tile.type === 'COMMUNITY_CHEST')) {
+                    playSound('community_chance.mp3');
                 }
                 break;
             }
@@ -230,7 +249,9 @@ export const GameProvider = ({ children }) => {
                 updatePlayerState(payload.playerId, { balance: payload.balance });
                 break;
             case 'RENT_PAID': {
-                playSound('pay_rent.mp3');
+                setTimeout(() => {
+                    playSound('pay_rent.mp3');
+                }, 300);
                 const prop = payload.propertyId !== undefined ? propertyCatalogById[payload.propertyId] : null;
                 const propName = prop ? prop.name : '';
                 
@@ -491,6 +512,7 @@ export const GameProvider = ({ children }) => {
         setUser(null);
         setRoom(null);
         setGame(null);
+        processedGameVersionRef.current = -1;
         setLogs([]);
         setDice(null);
         disconnectWebSocket();
@@ -532,6 +554,7 @@ export const GameProvider = ({ children }) => {
             disconnectWebSocket();
             setRoom(null);
             setGame(null);
+            processedGameVersionRef.current = -1;
             setLogs([]);
             setCurrentScreen('home');
             return;
@@ -546,6 +569,7 @@ export const GameProvider = ({ children }) => {
             disconnectWebSocket();
             setRoom(null);
             setGame(null);
+            processedGameVersionRef.current = -1;
             setLogs([]);
             setCurrentScreen('home');
         }
@@ -601,6 +625,16 @@ export const GameProvider = ({ children }) => {
         try {
             const res = await getAxios().get(`/games/${gameId}`);
             const state = res.data.data;
+            if (state && state.version !== undefined && state.version !== null) {
+                const parsedVersion = Number(state.version);
+                if (!isNaN(parsedVersion)) {
+                    if (parsedVersion < processedGameVersionRef.current) {
+                        console.log(`[GameContext] Ignoring stale REST state (version ${parsedVersion} < current local ${processedGameVersionRef.current})`);
+                        return;
+                    }
+                    processedGameVersionRef.current = parsedVersion;
+                }
+            }
             if (state && state.players) {
                 state.players = state.players.map(p => ({
                     ...p,

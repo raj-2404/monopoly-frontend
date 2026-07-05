@@ -5,199 +5,199 @@
     "name": "Mumbai",
     "group": "WEST",
     "price": 8500,
-    "housePrice": 1500,
-    "hotelPrice": 3000,
-    "rent": [800, 2000, 4000, 6000, 9000]
+    "housePrice": 1700,
+    "hotelPrice": 3400,
+    "rent": [850, 2200, 4200, 6500, 9500]
   },
   {
     "id": 2,
     "type": "PROPERTY",
     "name": "Goa",
     "group": "WEST",
-    "price": 7000,
-    "housePrice": 1400,
-    "hotelPrice": 2500,
-    "rent": [650, 1800, 3300, 5000, 7500]
+    "price": 5000,
+    "housePrice": 1200,
+    "hotelPrice": 2200,
+    "rent": [500, 1400, 2600, 4000, 5800]
   },
   {
     "id": 3,
     "type": "PROPERTY",
     "name": "Pune",
     "group": "WEST",
-    "price": 6000,
-    "housePrice": 1200,
-    "hotelPrice": 2000,
-    "rent": [500, 1500, 2500, 4000, 6000]
+    "price": 4200,
+    "housePrice": 1000,
+    "hotelPrice": 1800,
+    "rent": [420, 1200, 2200, 3400, 5000]
   },
   {
     "id": 4,
     "type": "PROPERTY",
     "name": "Surat",
     "group": "WEST",
-    "price": 5000,
-    "housePrice": 1100,
-    "hotelPrice": 1800,
-    "rent": [420, 1200, 2100, 3400, 4800]
+    "price": 2800,
+    "housePrice": 700,
+    "hotelPrice": 1300,
+    "rent": [280, 800, 1500, 2300, 3400]
   },
   {
     "id": 5,
     "type": "PROPERTY",
     "name": "Ahmedabad",
     "group": "WEST",
-    "price": 4000,
-    "housePrice": 1000,
-    "hotelPrice": 1500,
-    "rent": [350, 1000, 1800, 3000, 3500]
+    "price": 2500,
+    "housePrice": 650,
+    "hotelPrice": 1200,
+    "rent": [250, 700, 1300, 2000, 3000]
   },
   {
     "id": 6,
     "type": "PROPERTY",
     "name": "Kolkata",
     "group": "EAST",
-    "price": 7000,
-    "housePrice": 1300,
-    "hotelPrice": 2500,
-    "rent": [650, 1700, 3200, 4800, 7000]
+    "price": 6800,
+    "housePrice": 1500,
+    "hotelPrice": 2800,
+    "rent": [680, 1800, 3400, 5200, 7600]
   },
   {
     "id": 7,
     "type": "PROPERTY",
     "name": "Patna",
     "group": "EAST",
-    "price": 6000,
-    "housePrice": 1200,
-    "hotelPrice": 2200,
-    "rent": [520, 1450, 2700, 4000, 5800]
+    "price": 4300,
+    "housePrice": 1000,
+    "hotelPrice": 1800,
+    "rent": [430, 1200, 2200, 3400, 5000]
   },
   {
     "id": 8,
     "type": "PROPERTY",
-    "name": "Assam",
+    "name": "Ranchi",
     "group": "EAST",
-    "price": 5000,
-    "housePrice": 1000,
-    "hotelPrice": 1800,
-    "rent": [420, 1200, 2100, 3200, 4600]
+    "price": 3600,
+    "housePrice": 900,
+    "hotelPrice": 1600,
+    "rent": [360, 1000, 1800, 2800, 4200]
   },
   {
     "id": 9,
     "type": "PROPERTY",
-    "name": "Ranchi",
+    "name": "Darjeeling",
     "group": "EAST",
-    "price": 4200,
-    "housePrice": 900,
-    "hotelPrice": 1600,
-    "rent": [350, 1000, 1800, 2700, 3900]
+    "price": 2400,
+    "housePrice": 600,
+    "hotelPrice": 1100,
+    "rent": [240, 650, 1200, 1800, 2700]
   },
   {
     "id": 10,
     "type": "PROPERTY",
-    "name": "Darjeeling",
+    "name": "Gangtok",
     "group": "EAST",
-    "price": 3500,
-    "housePrice": 800,
-    "hotelPrice": 1400,
-    "rent": [280, 800, 1400, 2200, 3200]
+    "price": 2000,
+    "housePrice": 500,
+    "hotelPrice": 1000,
+    "rent": [200, 600, 1000, 1500, 2200]
   },
   {
     "id": 11,
     "type": "PROPERTY",
-    "name": "Benglauru",
+    "name": "Bengaluru",
     "group": "SOUTH",
-    "price": 5500,
-    "housePrice": 1100,
-    "hotelPrice": 2000,
-    "rent": [500, 1400, 2500, 3600, 5200]
+    "price": 7500,
+    "housePrice": 1600,
+    "hotelPrice": 3000,
+    "rent": [750, 2000, 3800, 5800, 8400]
   },
   {
     "id": 12,
     "type": "PROPERTY",
     "name": "Chennai",
     "group": "SOUTH",
-    "price": 4800,
-    "housePrice": 1000,
-    "hotelPrice": 1800,
-    "rent": [420, 1200, 2200, 3200, 4600]
+    "price": 4700,
+    "housePrice": 1100,
+    "hotelPrice": 2000,
+    "rent": [470, 1300, 2400, 3700, 5400]
   },
   {
     "id": 13,
     "type": "PROPERTY",
     "name": "Hyderabad",
     "group": "SOUTH",
-    "price": 4200,
-    "housePrice": 900,
-    "hotelPrice": 1600,
-    "rent": [360, 1000, 1800, 2600, 3800]
+    "price": 4000,
+    "housePrice": 950,
+    "hotelPrice": 1700,
+    "rent": [400, 1100, 2000, 3000, 4500]
   },
   {
     "id": 14,
     "type": "PROPERTY",
     "name": "Kochi",
     "group": "SOUTH",
-    "price": 3500,
-    "housePrice": 800,
-    "hotelPrice": 1400,
-    "rent": [300, 850, 1500, 2200, 3200]
+    "price": 2700,
+    "housePrice": 700,
+    "hotelPrice": 1300,
+    "rent": [270, 750, 1400, 2100, 3100]
   },
   {
     "id": 15,
     "type": "PROPERTY",
-    "name": "Kerala",
+    "name": "Mysuru",
     "group": "SOUTH",
-    "price": 3000,
-    "housePrice": 700,
-    "hotelPrice": 1200,
-    "rent": [250, 700, 1200, 1800, 2600]
+    "price": 2300,
+    "housePrice": 600,
+    "hotelPrice": 1100,
+    "rent": [230, 650, 1200, 1800, 2700]
   },
   {
     "id": 16,
     "type": "PROPERTY",
     "name": "Delhi",
     "group": "NORTH",
-    "price": 4500,
-    "housePrice": 1000,
-    "hotelPrice": 1800,
-    "rent": [420, 1200, 2200, 3200, 4500]
+    "price": 7300,
+    "housePrice": 1600,
+    "hotelPrice": 2900,
+    "rent": [730, 1950, 3700, 5600, 8100]
   },
   {
     "id": 17,
     "type": "PROPERTY",
     "name": "Chandigarh",
     "group": "NORTH",
-    "price": 4000,
-    "housePrice": 900,
-    "hotelPrice": 1600,
-    "rent": [350, 1000, 1800, 2700, 3900]
+    "price": 4600,
+    "housePrice": 1100,
+    "hotelPrice": 2000,
+    "rent": [460, 1300, 2400, 3600, 5300]
   },
   {
     "id": 18,
     "type": "PROPERTY",
-    "name": "Shimla",
+    "name": "Jaipur",
     "group": "NORTH",
-    "price": 3500,
-    "housePrice": 800,
-    "hotelPrice": 1400,
-    "rent": [300, 850, 1500, 2200, 3200]
+    "price": 3900,
+    "housePrice": 900,
+    "hotelPrice": 1700,
+    "rent": [390, 1100, 2000, 3000, 4400]
   },
   {
     "id": 19,
     "type": "PROPERTY",
-    "name": "Amritsar",
+    "name": "Shimla",
     "group": "NORTH",
-    "price": 3000,
-    "housePrice": 700,
+    "price": 2600,
+    "housePrice": 650,
     "hotelPrice": 1200,
-    "rent": [250, 700, 1200, 1800, 2600]
+    "rent": [260, 700, 1300, 2000, 2900]
   },
   {
     "id": 20,
     "type": "PROPERTY",
-    "name": "Jaipur",
+    "name": "Amritsar",
     "group": "NORTH",
-    "price": 2500,
-    "housePrice": 600,
+    "price": 2200,
+    "housePrice": 550,
     "hotelPrice": 1000,
-    "rent": [200, 600, 1000, 1500, 2200]
+    "rent": [220, 600, 1100, 1700, 2500]
   },
   {
     "id": 21,
